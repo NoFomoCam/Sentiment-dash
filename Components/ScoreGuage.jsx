@@ -18,5 +18,5 @@ export default function ScoreGauge({ label, sublabel, score, zone }) {
           <path d="M 140 34 A 80 80 0 0 1 165 60" stroke="#f97316" strokeWidth="8" fill="none" opacity="0.3" />
           <path d="M 165 60 A 80 80 0 0 1 180 100" stroke="#ef4444" strokeWidth="8" fill="none" opacity="0.3" />
 
-          <g transform={`rotate(${rotation}, 100, 100)`}>
+          <g transform={`rotate(${rotation}, 100, 100)`}
             
