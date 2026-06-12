@@ -25,5 +25,5 @@ export default function SentimentChart({ history }) {
       width: containerRef.current.clientWidth,
       height: 400,
       layout: {
-        background: { type: ColorType.Solid, color: '#0a1 }
+        background: { type: ColorType.Solid, color: '#0a1' }
 
