@@ -22,7 +22,7 @@ export default function SentimentChart({ history }) {
     }
 
     const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
+      width: {containerRef.current.clientWidth,
       height: 400,
       layout: {
         background: { type: ColorType.Solid, color: '#0a1' }
