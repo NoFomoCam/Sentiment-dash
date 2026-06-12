@@ -15,4 +15,4 @@ const FIELDS = [
   { key: 'pcr', label: 'Put/Call Ratio', placeholder: '0.85' },
   { key: 'nvda', label: 'NVDA', placeholder: '208.00' },
   { key: 'smh', label: 'SMH', placeholder: '591.00' },
-  { key: 'rsp', label: 'RSP }
+  { key: 'rsp', label: 'RSP', placeholder: "70.00'}
