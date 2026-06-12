@@ -3,11 +3,10 @@
 import { useState, useEffect } from 'react';
 import { loadHistory, saveDailyReading } from '../lib/supabase';
 import { scoreFromRawData, getZone } from '../lib/scoring';
-import ScoreGauge from '../components/ScoreGauge';
-import IndicatorBreakdown from '../components/IndicatorBreakdown';
-import SentimentChart from '../components/SentimentChart';
-import ManualInput from '../components/ManualInput';
-
+import ScoreGauge from '../Components/ScoreGuage';
+import IndicatorBreakdown from '../Components/IndicatorBreakdown';
+import SentimentChart from '../Components/SentimentChart';
+import ManualInput from '../Components/ManualInput';
 // Default fallback values (Jun 9 2026)
 const FALLBACK = {
   vix: 19.88, vix_prev: 18.93,
