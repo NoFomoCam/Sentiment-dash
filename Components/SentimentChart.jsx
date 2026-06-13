@@ -27,7 +27,8 @@ if (!chartLib || !containerRef.current || !history.length) return;
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: 400,
-      layout: {
+      layout: {width: containerRef.current.clientWidth,
+
         background: { type: ColorType.Solid, color: '#0a1628' },
         textColor: '#475569',
         fontFamily: 'JetBrains Mono, monospace',
