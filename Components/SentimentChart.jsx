@@ -16,6 +16,7 @@ export default function SentimentChart({ history }) {
     if (!chartLib || !containerRef.current || !history.length) return;
 
     const { createChart, ColorType, LineStyle } = chartLib;
+if (!chartLib || !containerRef.current || !history.length) return;
 
     // Clear previous chart
     if (chartRef.current) {
