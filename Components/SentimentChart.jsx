@@ -12,11 +12,13 @@ export default function SentimentChart({ history }) {
     import('lightweight-charts').then(mod => setChartLib(mod));
   }, []);
 
-  useEffect(() => {
-    if (!chartLib || !containerRef.current || !history.length) return;
+  u
 
     const { createChart, ColorType, LineStyle } = chartLib;
-if (!chartLib || !containerRef.current || !history.length) return;
+if (!chartLib || !containerRef.current) return;
+
+
+  
 
     // Clear previous chart
     if (chartRef.current) {
@@ -25,7 +27,8 @@ if (!chartLib || !containerRef.current || !history.length) return;
     }
 
     const chart = createChart(containerRef.current, {
-      width: containerRef.current.clientWidth,
+      width: containerRef.current.clientWidth || containerRef.current.offsetWidth || (window.innerWidth - 32),
+
       height: 400,
       layout: {width: containerRef.current.clientWidth,
 
