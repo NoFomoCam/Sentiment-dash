@@ -7,20 +7,15 @@ export default function SentimentChart({ history }) {
   const containerRef = useRef(null);
   const [chartLib, setChartLib] = useState(null);
 
-  // Dynamically import lightweight-charts (client-side only)
   useEffect(() => {
     import('lightweight-charts').then(mod => setChartLib(mod));
   }, []);
 
-  u
+  useEffect(() => {
+    if (!chartLib || !containerRef.current) return;
 
     const { createChart, ColorType, LineStyle } = chartLib;
-if (!chartLib || !containerRef.current) return;
 
-
-  
-
-    // Clear previous chart
     if (chartRef.current) {
       chartRef.current.remove();
       chartRef.current = null;
@@ -28,10 +23,8 @@ if (!chartLib || !containerRef.current) return;
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth || containerRef.current.offsetWidth || (window.innerWidth - 32),
-
       height: 400,
-      layout: {width: containerRef.current.clientWidth,
-
+      layout: {
         background: { type: ColorType.Solid, color: '#0a1628' },
         textColor: '#475569',
         fontFamily: 'JetBrains Mono, monospace',
@@ -42,7 +35,7 @@ if (!chartLib || !containerRef.current) return;
         horzLines: { color: '#1e293b', style: LineStyle.Dotted },
       },
       crosshair: {
-        mode: 0, // Normal crosshair
+        mode: 0,
         vertLine: { color: '#475569', labelBackgroundColor: '#1e293b' },
         horzLine: { color: '#475569', labelBackgroundColor: '#1e293b' },
       },
@@ -58,7 +51,6 @@ if (!chartLib || !containerRef.current) return;
       handleScale: { axisPressedMouseMove: true, pinch: true, mouseWheel: true },
     });
 
-    // Sentiment score line
     const sentimentSeries = chart.addLineSeries({
       color: '#eab308',
       lineWidth: 2,
@@ -66,7 +58,6 @@ if (!chartLib || !containerRef.current) return;
       title: 'Sentiment',
     });
 
-    // Buy zone (0-35)
     const buyZone = chart.addLineSeries({
       color: '#22c55e',
       lineWidth: 1,
@@ -75,7 +66,6 @@ if (!chartLib || !containerRef.current) return;
       crosshairMarkerVisible: false,
     });
 
-    // Sell zone (65-100)  
     const sellZone = chart.addLineSeries({
       color: '#ef4444',
       lineWidth: 1,
@@ -84,41 +74,35 @@ if (!chartLib || !containerRef.current) return;
       crosshairMarkerVisible: false,
     });
 
-    // Format history data for lightweight-charts (needs { time, value } format)
     const sentimentData = history
       .filter(h => h.date && h.live_score != null)
       .map(h => ({
-        time: h.date, // YYYY-MM-DD format from Supabase
+        time: h.date,
         value: h.live_score,
       }))
       .sort((a, b) => a.time.localeCompare(b.time));
 
-    // If history uses the old M/D/YY format, convert
     const convertedData = sentimentData.map(d => {
       if (d.time.includes('/')) {
         const parts = d.time.split('/');
         const yr = parts[2].length === 2 ? '20' + parts[2] : parts[2];
         const mo = parts[0].padStart(2, '0');
         const dy = parts[1].padStart(2, '0');
-        return { time: `${yr}-${mo}-${dy}`, value: d.value };
+        return { time: yr + '-' + mo + '-' + dy, value: d.value };
       }
       return d;
     });
 
     if (convertedData.length > 0) {
       sentimentSeries.setData(convertedData);
-
-      // Reference lines
       const times = convertedData.map(d => d.time);
       buyZone.setData(times.map(t => ({ time: t, value: 35 })));
       sellZone.setData(times.map(t => ({ time: t, value: 65 })));
-
       chart.timeScale().fitContent();
     }
 
     chartRef.current = chart;
 
-    // Resize handler
     const handleResize = () => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
