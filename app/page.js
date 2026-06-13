@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { loadHistory, saveDailyReading } from '../lib/supabase';
 import { scoreFromRawData, getZone } from '../lib/scoring';
-import ScoreGauge from '../Components/ScoreGuage';
+import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
 import ManualInput from '../Components/ManualInput';
