@@ -7,6 +7,7 @@ import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
 import ManualInput from '../Components/ManualInput';
+
 // Default fallback values (Jun 9 2026)
 const FALLBACK = {
   vix: 19.88, vix_prev: 18.93,
@@ -26,6 +27,8 @@ const FALLBACK = {
   pcr: 0.67, pcr_prev: 0.44,
 };
 
+const BRIEF_CACHE_KEY = 'sentiment_brief';
+
 export default function Dashboard() {
   const [liveData, setLiveData] = useState(null);
   const [history, setHistory] = useState([]);
@@ -34,8 +37,11 @@ export default function Dashboard() {
   const [scores, setScores] = useState({});
   const [showInput, setShowInput] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [brief, setBrief] = useState('');
+  const [briefLoading, setBriefLoading] = useState(false);
 
-  // Load history from Supabase on mount
+  // Load history and restore cached brief on mount
   useEffect(() => {
     async function init() {
       try {
@@ -45,15 +51,25 @@ export default function Dashboard() {
         console.error('Failed to load history:', e);
       }
 
-      // Compute initial scores from fallback
-      computeScores(FALLBACK);
+      computeScores(FALLBACK, hist);
       setLiveData(FALLBACK);
       setLoading(false);
+
+      // Restore today's brief from localStorage
+      try {
+        const cached = JSON.parse(localStorage.getItem(BRIEF_CACHE_KEY) || 'null');
+        const today = new Date().toISOString().split('T')[0];
+        if (cached?.date === today && cached?.brief) {
+          setBrief(cached.brief);
+        }
+      } catch {}
     }
     init();
   }, []);
 
-  function computeScores(data) {
+  // Returns the computed result so callers can use values immediately (not stale state)
+  function computeScores(data, currentHistory) {
+    const hist = currentHistory ?? history;
     const today = {
       vix: Number(data.vix), vix9d: Number(data.vix9d), vix3m: Number(data.vix3m),
       dxy: Number(data.dxy), spy: Number(data.spy), spx: Number(data.spx),
@@ -68,8 +84,7 @@ export default function Dashboard() {
       gld: Number(data.gld_prev), hyg: Number(data.hyg_prev), lqd: Number(data.lqd_prev),
     };
 
-    // Compute drawdown from history
-    const spxHist = history.filter(h => h.spx).slice(-50).map(h => h.spx);
+    const spxHist = hist.filter(h => h.spx).slice(-50).map(h => h.spx);
     const spx50High = spxHist.length ? Math.max(...spxHist, today.spx) : today.spx;
     const ddPct = spx50High > 0 ? ((today.spx / spx50High) - 1) * 100 : 0;
 
@@ -77,24 +92,59 @@ export default function Dashboard() {
     setScores(result.scores);
     setLiveScore(result.liveScore);
     setEodScore(result.eodScore);
+    return result;
   }
 
-  function handleManualUpdate(updated) {
+  async function handleManualUpdate(updated) {
     setLiveData(updated);
-    computeScores(updated);
+    const result = computeScores(updated);
 
-    // Save to Supabase
-    const today = new Date();
-    const dateStr = today.toISOString().split('T')[0];
-    saveDailyReading({
-      date: dateStr,
-      liveScore, eodScore,
-      vix: updated.vix, vix9d: updated.vix9d, vix3m: updated.vix3m,
-      dxy: updated.dxy, spy: updated.spy, spx: updated.spx,
-      rsp: updated.rsp, nvda: updated.nvda, smh: updated.smh,
-      gld: updated.gld, hyg: updated.hyg, lqd: updated.lqd,
-      nyad: updated.nyad, fear_greed: updated.fear_greed, pcr: updated.pcr,
-    }).catch(console.error);
+    const dateStr = updated.date || new Date().toISOString().split('T')[0];
+
+    setSaving(true);
+    try {
+      await saveDailyReading({
+        date: dateStr,
+        liveScore: result.liveScore,
+        eodScore: result.eodScore,
+        vix: updated.vix, vix9d: updated.vix9d, vix3m: updated.vix3m,
+        dxy: updated.dxy, spy: updated.spy, spx: updated.spx,
+        rsp: updated.rsp, nvda: updated.nvda, smh: updated.smh,
+        gld: updated.gld, hyg: updated.hyg, lqd: updated.lqd,
+        nyad: updated.nyad, fear_greed: updated.fear_greed, pcr: updated.pcr,
+      });
+      const hist = await loadHistory();
+      if (hist.length > 0) setHistory(hist);
+    } catch (e) {
+      console.error('Save error:', e);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function generateBrief(currentScores, currentLive, currentEod) {
+    setBriefLoading(true);
+    try {
+      const res = await fetch('/api/brief', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          liveScore: currentLive,
+          eodScore: currentEod,
+          scores: currentScores,
+        }),
+      });
+      const data = await res.json();
+      if (data.brief) {
+        setBrief(data.brief);
+        const today = new Date().toISOString().split('T')[0];
+        localStorage.setItem(BRIEF_CACHE_KEY, JSON.stringify({ date: today, brief: data.brief }));
+      }
+    } catch (e) {
+      console.error('Brief error:', e);
+    } finally {
+      setBriefLoading(false);
+    }
   }
 
   const liveZone = getZone(liveScore);
@@ -121,14 +171,19 @@ export default function Dashboard() {
       </div>
 
       {/* Controls */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="flex gap-2 mb-6 flex-wrap items-center">
         <button
           onClick={() => setShowInput(!showInput)}
-          className="px-4 py-2 bg-dashboard-buy/20 border border-dashboard-buy text-dashboard-buy 
+          className="px-4 py-2 bg-dashboard-buy/20 border border-dashboard-buy text-dashboard-buy
                      font-mono text-xs tracking-wider rounded cursor-pointer hover:bg-dashboard-buy/30"
         >
           ✎ ENTER LIVE VALUES
         </button>
+        {saving && (
+          <span className="text-[10px] text-dashboard-muted font-mono tracking-wider animate-pulse">
+            SAVING...
+          </span>
+        )}
       </div>
 
       {/* Manual Input Panel */}
@@ -149,7 +204,30 @@ export default function Dashboard() {
       {/* Indicator Breakdown */}
       <IndicatorBreakdown scores={scores} />
 
-      {/* Sentiment Chart - TradingView Lightweight Charts */}
+      {/* AI Brief */}
+      <div className="mt-4 bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-[9px] tracking-[3px] text-dashboard-muted">TODAY'S BRIEF</div>
+          <button
+            onClick={() => generateBrief(scores, liveScore, eodScore)}
+            disabled={briefLoading}
+            className="px-3 py-1 bg-dashboard-buy/10 border border-dashboard-buy/40 text-dashboard-buy
+                       font-mono text-[10px] tracking-wider rounded cursor-pointer
+                       hover:bg-dashboard-buy/20 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {briefLoading ? 'GENERATING...' : brief ? '↺ REGENERATE' : '▶ GENERATE'}
+          </button>
+        </div>
+        {brief ? (
+          <p className="text-[11px] text-dashboard-text leading-relaxed">{brief}</p>
+        ) : (
+          <p className="text-[10px] text-dashboard-muted italic">
+            Click GENERATE for a contrarian read of today's setup.
+          </p>
+        )}
+      </div>
+
+      {/* Sentiment Chart */}
       <div className="mt-6">
         <SentimentChart history={history} />
       </div>

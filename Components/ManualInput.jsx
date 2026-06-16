@@ -24,6 +24,7 @@ const FIELDS = [
 export default function ManualInput({ current, onUpdate, onClose }) {
   const [curr, setCurr] = useState({});
   const [prev, setPrev] = useState({});
+  const [date, setDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [loading, setLoading] = useState(true);
 
   // Load from Supabase first (persistent across sessions), fallback to current props
@@ -65,7 +66,7 @@ export default function ManualInput({ current, onUpdate, onClose }) {
     // Save to Supabase (persistent — survives code updates!)
     await saveInputValues('default', curr, prev).catch(console.error);
 
-    onUpdate(updated);
+    onUpdate({ ...updated, date });
     onClose();
   }
 
@@ -88,6 +89,19 @@ export default function ManualInput({ current, onUpdate, onClose }) {
         Enter today's close <span className="text-dashboard-buy">Current</span> and yesterday's
         close <span className="text-dashboard-muted">Prev Close</span>. Leave blank to keep existing.
       </p>
+
+      {/* Date field */}
+      <div className="flex items-center gap-3 mb-4 p-2 border border-dashboard-border rounded">
+        <div className="text-[10px] text-dashboard-muted w-24">Date</div>
+        <input
+          type="date"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+          className="bg-dashboard-bg border border-dashboard-buy/30 text-dashboard-text
+                     font-mono text-xs p-2 rounded outline-none focus:border-dashboard-buy"
+        />
+        <div className="text-[9px] text-dashboard-muted">Default = today · change for backfill</div>
+      </div>
 
       {/* Column headers */}
       <div className="grid grid-cols-[1fr_1fr_1fr] gap-2 mb-2">
