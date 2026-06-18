@@ -44,8 +44,9 @@ export default function Dashboard() {
   // Load history and restore cached brief on mount
   useEffect(() => {
     async function init() {
+      let hist = [];
       try {
-        const hist = await loadHistory();
+        hist = await loadHistory();
         if (hist.length > 0) setHistory(hist);
       } catch (e) {
         console.error('Failed to load history:', e);
@@ -113,7 +114,7 @@ export default function Dashboard() {
         gld: updated.gld, hyg: updated.hyg, lqd: updated.lqd,
         nyad: updated.nyad, fear_greed: updated.fear_greed, pcr: updated.pcr,
       });
-      const hist = await loadHistory();
+      hist = await loadHistory();
       if (hist.length > 0) setHistory(hist);
     } catch (e) {
       console.error('Save error:', e);
@@ -239,3 +240,4 @@ export default function Dashboard() {
     </main>
   );
 }
+
