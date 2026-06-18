@@ -1,1 +1,0 @@
-self.__REACT_LOADABLE_MANIFEST='{"Components\\\\SentimentChart.jsx -> lightweight-charts":{"id":391,"files":["static/chunks/391.d44f4599ca5b182f.js"]}}';
