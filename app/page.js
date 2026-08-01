@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { loadHistory, saveDailyReading } from '../lib/supabase';
+import { loadHistory, saveDailyReading, loadMarketSymbols, loadMarketSnapshot } from '../lib/supabase';
 import { scoreFromRawData, getZone } from '../lib/scoring';
 import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
+import PriceChart from '../Components/PriceChart';
 import ManualInput from '../Components/ManualInput';
 
 // Default fallback values (Jun 9 2026)
@@ -27,6 +28,35 @@ const FALLBACK = {
   pcr: 0.67, pcr_prev: 0.44,
 };
 
+// Map market_data ticker -> scoring input key.
+// VSTN is Cam's established short-term-vol input (fills the vix9d/term-structure slot).
+// CNN Fear&Greed + Put/Call have no TV source yet, so they stay unset (excluded from the composite).
+const SYMBOL_MAP = {
+  VIX: 'vix', VSTN: 'vix9d', VIX3M: 'vix3m', DXY: 'dxy', SPY: 'spy',
+  SPX: 'spx', RSP: 'rsp', NVDA: 'nvda', SMH: 'smh', GLD: 'gld',
+  HYG: 'hyg', LQD: 'lqd', ADD: 'nyad',
+};
+
+// Build a FALLBACK-shaped live reading from real market_data snapshot.
+// Returns { data, asOf, spxCloses } or null if there isn't enough data.
+function snapshotToLiveData(snap) {
+  if (!snap || !snap.SPX || snap.SPX.length < 2) return null;
+  const data = { fear_greed: null, fear_greed_prev: null, pcr: null, pcr_prev: null };
+  for (const [sym, key] of Object.entries(SYMBOL_MAP)) {
+    const arr = snap[sym];
+    if (!arr || arr.length === 0) continue;
+    const last = arr[arr.length - 1];
+    const prev = arr[arr.length - 2] || last;
+    data[key] = last.close;
+    data[`${key}_prev`] = prev.close;
+  }
+  return {
+    data,
+    asOf: snap.SPX[snap.SPX.length - 1].date,
+    spxCloses: snap.SPX.map(r => r.close),
+  };
+}
+
 const BRIEF_CACHE_KEY = 'sentiment_brief';
 
 export default function Dashboard() {
@@ -40,6 +70,9 @@ export default function Dashboard() {
   const [saving, setSaving] = useState(false);
   const [brief, setBrief] = useState('');
   const [briefLoading, setBriefLoading] = useState(false);
+  const [symbols, setSymbols] = useState([]);
+  const [dataDate, setDataDate] = useState(null);
+  const [liveFromRealData, setLiveFromRealData] = useState(false);
 
   // Load history and restore cached brief on mount
   useEffect(() => {
@@ -52,9 +85,33 @@ export default function Dashboard() {
         console.error('Failed to load history:', e);
       }
 
-      computeScores(FALLBACK, hist);
-      setLiveData(FALLBACK);
+      // Build today's live reading from real market_data; fall back to hardcoded values.
+      let baseData = FALLBACK;
+      let spxCloses = null;
+      try {
+        const snap = await loadMarketSnapshot();
+        const built = snapshotToLiveData(snap);
+        if (built) {
+          baseData = built.data;
+          spxCloses = built.spxCloses;
+          setDataDate(built.asOf);
+          setLiveFromRealData(true);
+        }
+      } catch (e) {
+        console.error('Failed to load market snapshot:', e);
+      }
+
+      computeScores(baseData, hist, spxCloses);
+      setLiveData(baseData);
       setLoading(false);
+
+      // Populate the price-chart symbol selector from market_data
+      try {
+        const syms = await loadMarketSymbols();
+        if (syms.length > 0) setSymbols(syms);
+      } catch (e) {
+        console.error('Failed to load symbols:', e);
+      }
 
       // Restore today's brief from localStorage
       try {
@@ -69,14 +126,16 @@ export default function Dashboard() {
   }, []);
 
   // Returns the computed result so callers can use values immediately (not stale state)
-  function computeScores(data, currentHistory) {
+  // fear_greed / pcr are kept null-able so a missing source excludes them from the composite.
+  function computeScores(data, currentHistory, spxCloses) {
     const hist = currentHistory ?? history;
+    const num = v => (v == null || v === '' ? null : Number(v));
     const today = {
       vix: Number(data.vix), vix9d: Number(data.vix9d), vix3m: Number(data.vix3m),
       dxy: Number(data.dxy), spy: Number(data.spy), spx: Number(data.spx),
       rsp: Number(data.rsp), nvda: Number(data.nvda), smh: Number(data.smh),
       gld: Number(data.gld), hyg: Number(data.hyg), lqd: Number(data.lqd),
-      nyad: Number(data.nyad), fear_greed: Number(data.fear_greed), pcr: Number(data.pcr),
+      nyad: Number(data.nyad), fear_greed: num(data.fear_greed), pcr: num(data.pcr),
     };
     const prev = {
       vix: Number(data.vix_prev), spy: Number(data.spy_prev), spx: Number(data.spx_prev),
@@ -85,8 +144,10 @@ export default function Dashboard() {
       gld: Number(data.gld_prev), hyg: Number(data.hyg_prev), lqd: Number(data.lqd_prev),
     };
 
-    const spxHist = hist.filter(h => h.spx).slice(-50).map(h => h.spx);
-    const spx50High = spxHist.length ? Math.max(...spxHist, today.spx) : today.spx;
+    // Prefer a real SPX close series (from market_data) for the drawdown window.
+    let spxSeries = spxCloses && spxCloses.length ? spxCloses : hist.filter(h => h.spx).map(h => h.spx);
+    spxSeries = spxSeries.slice(-50);
+    const spx50High = spxSeries.length ? Math.max(...spxSeries, today.spx) : today.spx;
     const ddPct = spx50High > 0 ? ((today.spx / spx50High) - 1) * 100 : 0;
 
     const result = scoreFromRawData(today, prev, { drawdownPct: ddPct, includeEod: true });
@@ -114,7 +175,7 @@ export default function Dashboard() {
         gld: updated.gld, hyg: updated.hyg, lqd: updated.lqd,
         nyad: updated.nyad, fear_greed: updated.fear_greed, pcr: updated.pcr,
       });
-      hist = await loadHistory();
+      const hist = await loadHistory();
       if (hist.length > 0) setHistory(hist);
     } catch (e) {
       console.error('Save error:', e);
@@ -169,6 +230,12 @@ export default function Dashboard() {
         <h1 className="text-2xl font-extrabold tracking-wider">
           MARKET SENTIMENT CONSOLE
         </h1>
+        {dataDate && (
+          <div className="mt-1 text-[9px] font-mono tracking-wider text-dashboard-muted">
+            <span className="text-dashboard-buy">● LIVE DATA</span> · AS OF {dataDate} ·
+            {' '}CNN F&amp;G + PUT/CALL PENDING SOURCE
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -226,6 +293,11 @@ export default function Dashboard() {
             Click GENERATE for a contrarian read of today's setup.
           </p>
         )}
+      </div>
+
+      {/* Price Charts (raw market data) */}
+      <div className="mt-6">
+        <PriceChart symbols={symbols} defaultSymbol="VIX" />
       </div>
 
       {/* Sentiment Chart */}

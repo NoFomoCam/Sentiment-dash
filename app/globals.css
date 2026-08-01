@@ -1,3 +1,9 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer components {
+  .chart-container {
+    @apply bg-dashboard-card border border-dashboard-border rounded-lg;
+  }
+}
