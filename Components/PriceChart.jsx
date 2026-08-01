@@ -11,12 +11,24 @@ const WINDOWS = [
   { label: 'ALL', days: null },
 ];
 
+const levelsKey = (sym) => `sentiment_levels_${sym}`;
+const loadLevels = (sym) => {
+  try { return JSON.parse(localStorage.getItem(levelsKey(sym)) || '[]'); }
+  catch { return []; }
+};
+const saveLevels = (sym, prices) => {
+  try { localStorage.setItem(levelsKey(sym), JSON.stringify(prices)); } catch {}
+};
+
 export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
   const dataRef = useRef([]);
+  const priceLinesRef = useRef([]); // [{ price, line }]
+  const drawModeRef = useRef(false);
+  const symbolRef = useRef(defaultSymbol);
 
   const [chartLib, setChartLib] = useState(null);
   const [symbol, setSymbol] = useState(defaultSymbol);
@@ -24,6 +36,12 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
   const [loading, setLoading] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const [meta, setMeta] = useState(null);
+  const [drawMode, setDrawMode] = useState(false);
+  const [levelCount, setLevelCount] = useState(0);
+
+  // Keep refs in sync so the (once-subscribed) click handler reads live values.
+  useEffect(() => { drawModeRef.current = drawMode; }, [drawMode]);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
 
   // Zoom the visible range to the selected window (client-side, no refetch).
   const applyWindow = useCallback((label) => {
@@ -37,11 +55,60 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
     const fromDate = new Date(lastTime);
     fromDate.setDate(fromDate.getDate() - days);
     const from = fromDate.toISOString().slice(0, 10);
-    try {
-      ts.setVisibleRange({ from, to: lastTime });
-    } catch {
-      ts.fitContent();
+    try { ts.setVisibleRange({ from, to: lastTime }); }
+    catch { ts.fitContent(); }
+  }, []);
+
+  // Redraw the persisted horizontal levels for a symbol.
+  const redrawLevels = useCallback((sym) => {
+    const series = seriesRef.current;
+    if (!series) return;
+    priceLinesRef.current.forEach(pl => { try { series.removePriceLine(pl.line); } catch {} });
+    priceLinesRef.current = loadLevels(sym).map(price => ({
+      price,
+      line: series.createPriceLine({
+        price, color: '#38bdf8', lineWidth: 1, lineStyle: 2,
+        axisLabelVisible: true, title: '',
+      }),
+    }));
+    setLevelCount(priceLinesRef.current.length);
+  }, []);
+
+  // Click near an existing level removes it; otherwise add a level at that price.
+  const toggleLevelAt = useCallback((y) => {
+    const series = seriesRef.current;
+    const sym = symbolRef.current;
+    if (!series) return;
+    const price = series.coordinateToPrice(y);
+    if (price == null) return;
+
+    const hit = priceLinesRef.current.find(pl => {
+      const c = series.priceToCoordinate(pl.price);
+      return c != null && Math.abs(c - y) <= 6;
+    });
+    if (hit) {
+      try { series.removePriceLine(hit.line); } catch {}
+      priceLinesRef.current = priceLinesRef.current.filter(x => x !== hit);
+    } else {
+      const rounded = Number(price.toFixed(2));
+      priceLinesRef.current.push({
+        price: rounded,
+        line: series.createPriceLine({
+          price: rounded, color: '#38bdf8', lineWidth: 1, lineStyle: 2,
+          axisLabelVisible: true, title: '',
+        }),
+      });
     }
+    saveLevels(sym, priceLinesRef.current.map(x => x.price));
+    setLevelCount(priceLinesRef.current.length);
+  }, []);
+
+  const clearLevels = useCallback(() => {
+    const series = seriesRef.current;
+    if (series) priceLinesRef.current.forEach(pl => { try { series.removePriceLine(pl.line); } catch {} });
+    priceLinesRef.current = [];
+    saveLevels(symbolRef.current, []);
+    setLevelCount(0);
   }, []);
 
   // Load the charting library on mount.
@@ -78,6 +145,11 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       borderVisible: false,
     });
 
+    chart.subscribeClick(param => {
+      if (!drawModeRef.current || !param.point) return;
+      toggleLevelAt(param.point.y);
+    });
+
     chartRef.current = chart;
     seriesRef.current = series;
 
@@ -96,8 +168,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       chart.remove();
       chartRef.current = null;
       seriesRef.current = null;
+      priceLinesRef.current = [];
     };
-  }, [chartLib]);
+  }, [chartLib, toggleLevelAt]);
 
   // Fetch + render data whenever the symbol changes (chart must exist first).
   useEffect(() => {
@@ -113,6 +186,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       dataRef.current = candles;
       seriesRef.current.setData(candles);
       applyWindow(win);
+      redrawLevels(symbol);
       const last = candles[candles.length - 1];
       const prev = candles[candles.length - 2];
       setMeta(last ? {
@@ -123,7 +197,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [symbol, chartLib, applyWindow]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol, chartLib, applyWindow, redrawLevels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-zoom when the window selection changes.
   useEffect(() => { applyWindow(win); }, [win, applyWindow]);
@@ -190,9 +264,29 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
             </button>
           ))}
           <button
+            onClick={() => setDrawMode(d => !d)}
+            title="Draw horizontal levels — click chart to add, click a line to remove"
+            className={`ml-1 px-2 py-1 font-mono text-[10px] tracking-wider rounded border cursor-pointer
+              ${drawMode
+                ? 'bg-sky-500/20 border-sky-400 text-sky-400'
+                : 'border-dashboard-border text-dashboard-muted hover:text-dashboard-text'}`}
+          >
+            ✎ LEVELS
+          </button>
+          {levelCount > 0 && (
+            <button
+              onClick={clearLevels}
+              title="Clear all levels for this symbol"
+              className="px-2 py-1 font-mono text-[10px] rounded border border-dashboard-border
+                         text-dashboard-muted hover:text-dashboard-sell cursor-pointer"
+            >
+              ✕{levelCount}
+            </button>
+          )}
+          <button
             onClick={toggleFull}
             title={isFull ? 'Exit fullscreen' : 'Fullscreen'}
-            className="ml-1 px-2 py-1 font-mono text-[10px] rounded border border-dashboard-border
+            className="px-2 py-1 font-mono text-[10px] rounded border border-dashboard-border
                        text-dashboard-muted hover:text-dashboard-text cursor-pointer"
           >
             {isFull ? '✕' : '⛶'}
@@ -204,8 +298,17 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       <div
         ref={containerRef}
         className="w-full"
-        style={{ height: isFull ? '100%' : 400, flex: isFull ? '1 1 auto' : 'none' }}
+        style={{
+          height: isFull ? '100%' : 400,
+          flex: isFull ? '1 1 auto' : 'none',
+          cursor: drawMode ? 'crosshair' : 'default',
+        }}
       />
+      {drawMode && (
+        <div className="mt-2 text-[9px] font-mono text-sky-400/80 tracking-wider">
+          LEVELS MODE · click to add a line · click a line to remove
+        </div>
+      )}
     </div>
   );
 }
