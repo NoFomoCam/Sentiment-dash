@@ -37,19 +37,23 @@ export default function IndicatorBreakdown({ scores, onExplain }) {
           const guideLabel = KEY_TO_GUIDE[key];
           const barColor = getBarColor(score);
           const Row = (
-            <div className="flex items-center gap-3 py-1">
-              <div className="w-24 text-[10px] text-dashboard-muted truncate shrink-0 text-left">
-                {INDICATOR_LABELS[key] || key}
+            <div className="py-1.5">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <span className="text-[10px] text-dashboard-muted truncate text-left">
+                  {INDICATOR_LABELS[key] || key}
+                </span>
+                <span className="text-[9px] font-medium shrink-0 text-right" style={{ color: sig ? sig.color : '#475569' }}>
+                  {sig ? sig.signal : ''}
+                </span>
               </div>
-              <div className="flex-1 h-3 bg-dashboard-bg rounded-sm overflow-hidden">
-                <div className="h-full rounded-sm transition-all duration-500"
-                  style={{ width: `${score}%`, backgroundColor: barColor }} />
-              </div>
-              <div className="w-8 text-right text-[10px] font-bold shrink-0" style={{ color: barColor }}>
-                {score}
-              </div>
-              <div className="w-28 text-[9px] truncate shrink-0 text-left" style={{ color: sig ? sig.color : '#475569' }}>
-                {sig ? sig.signal : ''}
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-2.5 bg-dashboard-bg rounded-sm overflow-hidden">
+                  <div className="h-full rounded-sm transition-all duration-500"
+                    style={{ width: `${score}%`, backgroundColor: barColor }} />
+                </div>
+                <span className="w-7 text-right text-[10px] font-bold shrink-0" style={{ color: barColor }}>
+                  {score}
+                </span>
               </div>
             </div>
           );
