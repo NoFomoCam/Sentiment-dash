@@ -74,12 +74,11 @@ export default function SentimentChart({ history }) {
       crosshairMarkerVisible: false,
     });
 
+    // Single composite score: prefer eod_score (full 11 indicators), fall back
+    // to live_score for older rows written before both were stored.
     const sentimentData = history
-      .filter(h => h.date && h.live_score != null)
-      .map(h => ({
-        time: h.date,
-        value: h.live_score,
-      }))
+      .map(h => ({ time: h.date, value: h.eod_score ?? h.live_score }))
+      .filter(d => d.time && d.value != null)
       .sort((a, b) => a.time.localeCompare(b.time));
 
     const convertedData = sentimentData.map(d => {

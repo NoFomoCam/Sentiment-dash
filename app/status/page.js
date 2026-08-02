@@ -244,6 +244,17 @@ export default function StatusPage() {
                     : 'up to date'}
               </div>
             )}
+            {result.brief && (
+              <div className="text-dashboard-muted">
+                brief — {result.brief.status === 'error'
+                  ? <span className="text-dashboard-sell">{result.brief.error}</span>
+                  : result.brief.status === 'generated'
+                    ? `generated for ${result.brief.date}`
+                    : result.brief.status === 'cached'
+                      ? `already posted for ${result.brief.date}`
+                      : result.brief.status}
+              </div>
+            )}
             {result.latest && (
               <div className="mt-1 text-dashboard-muted">
                 {Object.entries(result.latest).map(([k, v]) => `${k} ${v.close} (${v.date})`).join('  ·  ')}

@@ -1,15 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { loadHistory, saveDailyReading, loadMarketSymbols, loadMarketSnapshot } from '../lib/supabase';
+import { loadHistory, loadMarketSymbols, loadMarketSnapshot } from '../lib/supabase';
 import { scoreFromRawData, getZone } from '../lib/scoring';
 import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
 import PriceChart from '../Components/PriceChart';
-import ManualInput from '../Components/ManualInput';
 
-// Default fallback values (Jun 9 2026)
+// Default fallback values (Jun 9 2026) — only used if market_data can't load.
 const FALLBACK = {
   vix: 19.88, vix_prev: 18.93,
   vix9d: 24.28, vix9d_prev: 20.60,
@@ -31,14 +30,14 @@ const FALLBACK = {
 // Map market_data series -> scoring input key.
 // VSTN is Cam's established short-term-vol input (fills the vix9d/term-structure slot).
 // FG (CNN Fear&Greed composite) and PCR (raw put/call) are stored as their own
-// market_data series (source=cnn), so all 11 indicators now compute from real data.
+// market_data series (source=cnn), so all 11 indicators compute from real data.
 const SYMBOL_MAP = {
   VIX: 'vix', VSTN: 'vix9d', VIX3M: 'vix3m', DXY: 'dxy', SPY: 'spy',
   SPX: 'spx', RSP: 'rsp', NVDA: 'nvda', SMH: 'smh', GLD: 'gld',
   HYG: 'hyg', LQD: 'lqd', ADD: 'nyad', FG: 'fear_greed', PCR: 'pcr',
 };
 
-// Build a FALLBACK-shaped live reading from real market_data snapshot.
+// Build a FALLBACK-shaped reading from real market_data snapshot.
 // Returns { data, asOf, spxCloses } or null if there isn't enough data.
 function snapshotToLiveData(snap) {
   if (!snap || !snap.SPX || snap.SPX.length < 2) return null;
@@ -58,35 +57,31 @@ function snapshotToLiveData(snap) {
   };
 }
 
-const BRIEF_CACHE_KEY = 'sentiment_brief';
-
 export default function Dashboard() {
-  const [liveData, setLiveData] = useState(null);
   const [history, setHistory] = useState([]);
-  const [liveScore, setLiveScore] = useState(0);
-  const [eodScore, setEodScore] = useState(0);
+  const [score, setScore] = useState(0);         // single composite (full 11 indicators)
   const [scores, setScores] = useState({});
-  const [showInput, setShowInput] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [brief, setBrief] = useState('');
-  const [briefLoading, setBriefLoading] = useState(false);
   const [symbols, setSymbols] = useState([]);
   const [dataDate, setDataDate] = useState(null);
-  const [liveFromRealData, setLiveFromRealData] = useState(false);
 
-  // Load history and restore cached brief on mount
   useEffect(() => {
     async function init() {
       let hist = [];
       try {
         hist = await loadHistory();
-        if (hist.length > 0) setHistory(hist);
+        if (hist.length > 0) {
+          setHistory(hist);
+          // The day's brief is generated + stored by the daily cron; show the latest.
+          const latest = hist[hist.length - 1];
+          if (latest?.brief) setBrief(latest.brief);
+        }
       } catch (e) {
         console.error('Failed to load history:', e);
       }
 
-      // Build today's live reading from real market_data; fall back to hardcoded values.
+      // Compute today's score from real market_data; fall back to hardcoded values.
       let baseData = FALLBACK;
       let spxCloses = null;
       try {
@@ -96,38 +91,25 @@ export default function Dashboard() {
           baseData = built.data;
           spxCloses = built.spxCloses;
           setDataDate(built.asOf);
-          setLiveFromRealData(true);
         }
       } catch (e) {
         console.error('Failed to load market snapshot:', e);
       }
 
       computeScores(baseData, hist, spxCloses);
-      setLiveData(baseData);
       setLoading(false);
 
-      // Populate the price-chart symbol selector from market_data
       try {
         const syms = await loadMarketSymbols();
         if (syms.length > 0) setSymbols(syms);
       } catch (e) {
         console.error('Failed to load symbols:', e);
       }
-
-      // Restore today's brief from localStorage
-      try {
-        const cached = JSON.parse(localStorage.getItem(BRIEF_CACHE_KEY) || 'null');
-        const today = new Date().toISOString().split('T')[0];
-        if (cached?.date === today && cached?.brief) {
-          setBrief(cached.brief);
-        }
-      } catch {}
     }
     init();
   }, []);
 
-  // Returns the computed result so callers can use values immediately (not stale state)
-  // fear_greed / pcr are kept null-able so a missing source excludes them from the composite.
+  // The single score is the full composite (all 11 indicators, incl. PCR).
   function computeScores(data, currentHistory, spxCloses) {
     const hist = currentHistory ?? history;
     const num = v => (v == null || v === '' ? null : Number(v));
@@ -145,7 +127,6 @@ export default function Dashboard() {
       gld: Number(data.gld_prev), hyg: Number(data.hyg_prev), lqd: Number(data.lqd_prev),
     };
 
-    // Prefer a real SPX close series (from market_data) for the drawdown window.
     let spxSeries = spxCloses && spxCloses.length ? spxCloses : hist.filter(h => h.spx).map(h => h.spx);
     spxSeries = spxSeries.slice(-50);
     const spx50High = spxSeries.length ? Math.max(...spxSeries, today.spx) : today.spx;
@@ -153,65 +134,11 @@ export default function Dashboard() {
 
     const result = scoreFromRawData(today, prev, { drawdownPct: ddPct, includeEod: true });
     setScores(result.scores);
-    setLiveScore(result.liveScore);
-    setEodScore(result.eodScore);
+    setScore(result.eodScore);
     return result;
   }
 
-  async function handleManualUpdate(updated) {
-    setLiveData(updated);
-    const result = computeScores(updated);
-
-    const dateStr = updated.date || new Date().toISOString().split('T')[0];
-
-    setSaving(true);
-    try {
-      await saveDailyReading({
-        date: dateStr,
-        liveScore: result.liveScore,
-        eodScore: result.eodScore,
-        vix: updated.vix, vix9d: updated.vix9d, vix3m: updated.vix3m,
-        dxy: updated.dxy, spy: updated.spy, spx: updated.spx,
-        rsp: updated.rsp, nvda: updated.nvda, smh: updated.smh,
-        gld: updated.gld, hyg: updated.hyg, lqd: updated.lqd,
-        nyad: updated.nyad, fear_greed: updated.fear_greed, pcr: updated.pcr,
-      });
-      const hist = await loadHistory();
-      if (hist.length > 0) setHistory(hist);
-    } catch (e) {
-      console.error('Save error:', e);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function generateBrief(currentScores, currentLive, currentEod) {
-    setBriefLoading(true);
-    try {
-      const res = await fetch('/api/brief', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          liveScore: currentLive,
-          eodScore: currentEod,
-          scores: currentScores,
-        }),
-      });
-      const data = await res.json();
-      if (data.brief) {
-        setBrief(data.brief);
-        const today = new Date().toISOString().split('T')[0];
-        localStorage.setItem(BRIEF_CACHE_KEY, JSON.stringify({ date: today, brief: data.brief }));
-      }
-    } catch (e) {
-      console.error('Brief error:', e);
-    } finally {
-      setBriefLoading(false);
-    }
-  }
-
-  const liveZone = getZone(liveScore);
-  const eodZone = getZone(eodScore);
+  const zone = getZone(score);
 
   if (loading) {
     return (
@@ -239,59 +166,24 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex gap-2 mb-6 flex-wrap items-center">
-        <button
-          onClick={() => setShowInput(!showInput)}
-          className="px-4 py-2 bg-dashboard-buy/20 border border-dashboard-buy text-dashboard-buy
-                     font-mono text-xs tracking-wider rounded cursor-pointer hover:bg-dashboard-buy/30"
-        >
-          ✎ ENTER LIVE VALUES
-        </button>
-        {saving && (
-          <span className="text-[10px] text-dashboard-muted font-mono tracking-wider animate-pulse">
-            SAVING...
-          </span>
-        )}
-      </div>
-
-      {/* Manual Input Panel */}
-      {showInput && (
-        <ManualInput
-          current={liveData || FALLBACK}
-          onUpdate={handleManualUpdate}
-          onClose={() => setShowInput(false)}
-        />
-      )}
-
-      {/* Score Gauges */}
-      <div className="grid grid-cols-2 gap-4 mb-6">
-        <ScoreGauge label="LIVE SCORE" sublabel="EXCLUDES PCR" score={liveScore} zone={liveZone} />
-        <ScoreGauge label="EOD SCORE" sublabel="INCL. PCR" score={eodScore} zone={eodZone} />
+      {/* Score gauge — single composite */}
+      <div className="mb-6">
+        <ScoreGauge label="SENTIMENT SCORE" sublabel="0 = FEAR / BUY · 100 = GREED / SELL" score={score} zone={zone} />
       </div>
 
       {/* Indicator Breakdown */}
       <IndicatorBreakdown scores={scores} />
 
-      {/* AI Brief */}
+      {/* AI Brief — auto-generated by the daily update, read-only */}
       <div className="mt-4 bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[9px] tracking-[3px] text-dashboard-muted">TODAY'S BRIEF</div>
-          <button
-            onClick={() => generateBrief(scores, liveScore, eodScore)}
-            disabled={briefLoading}
-            className="px-3 py-1 bg-dashboard-buy/10 border border-dashboard-buy/40 text-dashboard-buy
-                       font-mono text-[10px] tracking-wider rounded cursor-pointer
-                       hover:bg-dashboard-buy/20 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {briefLoading ? 'GENERATING...' : brief ? '↺ REGENERATE' : '▶ GENERATE'}
-          </button>
+        <div className="text-[9px] tracking-[3px] text-dashboard-muted mb-3">
+          TODAY&apos;S CONTRARIAN READ
         </div>
         {brief ? (
           <p className="text-[11px] text-dashboard-text leading-relaxed">{brief}</p>
         ) : (
           <p className="text-[10px] text-dashboard-muted italic">
-            Click GENERATE for a contrarian read of today's setup.
+            The read is generated automatically after each U.S. close and posts here for the day.
           </p>
         )}
       </div>
@@ -318,4 +210,3 @@ export default function Dashboard() {
     </main>
   );
 }
-
