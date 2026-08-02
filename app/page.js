@@ -28,13 +28,14 @@ const FALLBACK = {
   pcr: 0.67, pcr_prev: 0.44,
 };
 
-// Map market_data ticker -> scoring input key.
+// Map market_data series -> scoring input key.
 // VSTN is Cam's established short-term-vol input (fills the vix9d/term-structure slot).
-// CNN Fear&Greed + Put/Call have no TV source yet, so they stay unset (excluded from the composite).
+// FG (CNN Fear&Greed composite) and PCR (raw put/call) are stored as their own
+// market_data series (source=cnn), so all 11 indicators now compute from real data.
 const SYMBOL_MAP = {
   VIX: 'vix', VSTN: 'vix9d', VIX3M: 'vix3m', DXY: 'dxy', SPY: 'spy',
   SPX: 'spx', RSP: 'rsp', NVDA: 'nvda', SMH: 'smh', GLD: 'gld',
-  HYG: 'hyg', LQD: 'lqd', ADD: 'nyad',
+  HYG: 'hyg', LQD: 'lqd', ADD: 'nyad', FG: 'fear_greed', PCR: 'pcr',
 };
 
 // Build a FALLBACK-shaped live reading from real market_data snapshot.
@@ -233,7 +234,7 @@ export default function Dashboard() {
         {dataDate && (
           <div className="mt-1 text-[9px] font-mono tracking-wider text-dashboard-muted">
             <span className="text-dashboard-buy">● LIVE DATA</span> · AS OF {dataDate} ·
-            {' '}CNN F&amp;G + PUT/CALL PENDING SOURCE
+            {' '}11/11 INDICATORS LIVE
           </div>
         )}
       </div>
