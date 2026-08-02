@@ -307,8 +307,11 @@ export default function Dashboard() {
       </div>
 
       {/* Footer */}
-      <div className="mt-8 text-center text-[9px] text-dashboard-muted tracking-wider">
-        V2.0 · NOT FINANCIAL ADVICE
+      <div className="mt-8 text-center text-[9px] text-dashboard-muted tracking-wider leading-relaxed">
+        DATA AUTO-UPDATES EACH WEEKDAY AFTER THE U.S. CLOSE
+        {' · '}~6PM ET (7PM DURING DAYLIGHT TIME)
+        {dataDate && <> · LATEST {dataDate}</>}
+        <br />V2.0 · NOT FINANCIAL ADVICE
       </div>
     </main>
   );
