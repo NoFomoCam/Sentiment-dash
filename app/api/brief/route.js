@@ -12,8 +12,44 @@ const INDICATOR_NAMES = {
   pcr: 'Put/Call Ratio',
 };
 
+// Lightweight abuse guard (pre-auth). The brief calls a paid model, and the
+// route is publicly reachable, so we: reject cross-origin callers, cap volume
+// per warm instance, and validate the payload. Per-user gating lands with auth.
+const RL = { windowMs: 60_000, max: 20, hits: [] };
+function rateLimited() {
+  const now = Date.now();
+  RL.hits = RL.hits.filter((t) => now - t < RL.windowMs);
+  if (RL.hits.length >= RL.max) return true;
+  RL.hits.push(now);
+  return false;
+}
+function sameOrigin(req) {
+  const origin = req.headers.get('origin');
+  if (!origin) return true; // same-origin POSTs frequently omit the Origin header
+  try {
+    return new URL(origin).host === req.headers.get('host');
+  } catch {
+    return false;
+  }
+}
+const validScore = (n) => Number.isFinite(n) && n >= 0 && n <= 100;
+
 export async function POST(req) {
-  const { liveScore, eodScore, scores } = await req.json();
+  if (!sameOrigin(req)) {
+    return Response.json({ error: 'forbidden' }, { status: 403 });
+  }
+  if (rateLimited()) {
+    return Response.json({ error: 'rate limited, try again shortly' }, { status: 429 });
+  }
+
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== 'object') {
+    return Response.json({ error: 'bad request' }, { status: 400 });
+  }
+  const { liveScore, eodScore, scores } = body;
+  if (!validScore(liveScore) || !validScore(eodScore) || !scores || typeof scores !== 'object') {
+    return Response.json({ error: 'bad request' }, { status: 400 });
+  }
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 });

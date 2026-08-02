@@ -312,6 +312,8 @@ export default function Dashboard() {
         {' · '}~6PM ET (7PM DURING DAYLIGHT TIME)
         {dataDate && <> · LATEST {dataDate}</>}
         <br />V2.0 · NOT FINANCIAL ADVICE
+        {' · '}
+        <a href="/status" className="underline hover:text-dashboard-text">SYSTEM STATUS</a>
       </div>
     </main>
   );
