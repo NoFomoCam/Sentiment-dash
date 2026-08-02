@@ -235,6 +235,15 @@ export default function StatusPage() {
               fetched — yahoo {result.counts?.yahoo ?? 0} · cboe {result.counts?.cboe ?? 0}
               {' · '}cnn {result.counts?.cnn ?? 0} · wsj {result.counts?.wsj ?? 0}
             </div>
+            {result.scores && (
+              <div className="text-dashboard-muted">
+                scores — {result.scores.error
+                  ? <span className="text-dashboard-sell">{result.scores.error}</span>
+                  : result.scores.scored > 0
+                    ? `synced ${result.scores.scored} day(s) ${result.scores.from}→${result.scores.to}`
+                    : 'up to date'}
+              </div>
+            )}
             {result.latest && (
               <div className="mt-1 text-dashboard-muted">
                 {Object.entries(result.latest).map(([k, v]) => `${k} ${v.close} (${v.date})`).join('  ·  ')}
