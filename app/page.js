@@ -82,6 +82,25 @@ function ruleBasedRead(score, zone, scores) {
   return s;
 }
 
+// Weekday distance from a data date to today; data auto-refreshes each weekday
+// after the close, so a healthy reading is <=1 trading day behind.
+function tradingDaysBehind(dateStr) {
+  if (!dateStr) return Infinity;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (d >= today) return 0;
+  let count = 0;
+  const cur = new Date(d);
+  cur.setDate(cur.getDate() + 1);
+  while (cur <= today) {
+    const dow = cur.getDay();
+    if (dow !== 0 && dow !== 6) count += 1;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return count;
+}
+
 export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [score, setScore] = useState(0);         // single composite (full 11 indicators)
@@ -92,13 +111,18 @@ export default function Dashboard() {
   const [dataDate, setDataDate] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
   const [guideTarget, setGuideTarget] = useState(null); // { label, signal } or null
+  const [reloadKey, setReloadKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
     async function init() {
+      if (reloadKey > 0) setRefreshing(true);
       let hist = [];
       try {
         hist = await loadHistory();
-        if (hist.length > 0) {
+        if (!cancelled && hist.length > 0) {
           setHistory(hist);
           // The day's brief is generated + stored by the daily cron; show the latest.
           const latest = hist[hist.length - 1];
@@ -117,24 +141,28 @@ export default function Dashboard() {
         if (built) {
           baseData = built.data;
           spxCloses = built.spxCloses;
-          setDataDate(built.asOf);
+          if (!cancelled) { setDataDate(built.asOf); setUsingFallback(false); }
+        } else if (!cancelled) {
+          setUsingFallback(true); // real data present but too thin to build a reading
         }
       } catch (e) {
         console.error('Failed to load market snapshot:', e);
+        if (!cancelled) setUsingFallback(true);
       }
 
-      computeScores(baseData, hist, spxCloses);
-      setLoading(false);
+      if (!cancelled) computeScores(baseData, hist, spxCloses);
+      if (!cancelled) { setLoading(false); setRefreshing(false); }
 
       try {
         const syms = await loadMarketSymbols();
-        if (syms.length > 0) setSymbols(syms);
+        if (!cancelled && syms.length > 0) setSymbols(syms);
       } catch (e) {
         console.error('Failed to load symbols:', e);
       }
     }
     init();
-  }, []);
+    return () => { cancelled = true; };
+  }, [reloadKey]);
 
   // The single score is the full composite (all 11 indicators, incl. PCR).
   function computeScores(data, currentHistory, spxCloses) {
@@ -166,6 +194,7 @@ export default function Dashboard() {
   }
 
   const zone = getZone(score);
+  const behind = tradingDaysBehind(dataDate);
 
   if (loading) {
     return (
@@ -192,12 +221,18 @@ export default function Dashboard() {
         <h1 className="text-2xl font-extrabold tracking-wider">
           MARKET SENTIMENT CONSOLE
         </h1>
-        {dataDate && (
-          <div className="mt-1 text-[9px] font-mono tracking-wider text-dashboard-muted">
-            <span className="text-dashboard-buy">● LIVE DATA</span> · AS OF {dataDate} ·
-            {' '}11/11 INDICATORS LIVE
-          </div>
-        )}
+        <div className="mt-1 text-[9px] font-mono tracking-wider">
+          {usingFallback ? (
+            <span className="text-dashboard-caution">⚠ FALLBACK VALUES · LIVE MARKET DATA UNAVAILABLE</span>
+          ) : behind <= 1 ? (
+            <span className="text-dashboard-muted">
+              <span className="text-dashboard-buy">● LIVE</span> · AS OF {dataDate} · 11/11 INDICATORS
+            </span>
+          ) : (
+            <span className="text-dashboard-caution">⚠ AS OF {dataDate} · {behind} TRADING DAYS BEHIND</span>
+          )}
+          {refreshing && <span className="text-dashboard-muted animate-pulse"> · REFRESHING…</span>}
+        </div>
       </div>
 
       {/* Controls */}
@@ -208,6 +243,15 @@ export default function Dashboard() {
                      font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text hover:border-dashboard-muted"
         >
           ? RULES / DEFINITIONS
+        </button>
+        <button
+          onClick={() => setReloadKey((k) => k + 1)}
+          disabled={refreshing}
+          className="px-3 py-1.5 bg-dashboard-card border border-dashboard-border text-dashboard-muted
+                     font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text
+                     hover:border-dashboard-muted disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {refreshing ? '↻ …' : '↻ REFRESH'}
         </button>
       </div>
 
