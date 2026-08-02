@@ -5,9 +5,10 @@ into Supabase public.market_data as their own daily series:
   FG  = Fear & Greed composite (0-100)   -> scoring key fear_greed
   PCR = raw Put/Call ratio (~0.4-1.5)    -> scoring key pcr   (from the F&G put/call component)
 
-Free, unofficial CNN endpoint (needs a browser UA + cnn.com Referer). Provides
-current value + ~1 year of daily history. Upserts on (symbol, date), source='cnn'.
-For deeper-than-1yr history a community dataset would be needed (vet before trusting).
+Free, unofficial CNN endpoint (needs a browser UA + cnn.com Referer). The dated
+graphdata/{start} form serves back to CNN's floor of 2021-01-04 (~5.5yr); earlier
+starts 500. Upserts on (symbol, date), source='cnn'. For pre-2021 history a vetted
+community dataset would be needed.
 
 Set DRY_RUN=1 to print without writing.
 Usage:  python scripts/import_cnn.py
@@ -19,7 +20,8 @@ import urllib.request
 
 ENV_PATH = os.path.join(os.path.dirname(__file__), "..", ".env.local")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
-URL = "https://production.dataviz.cnn.io/index/fearandgreed/graphdata"
+CNN_FLOOR = "2021-01-01"  # earliest CNN serves; earlier start dates return 500
+URL = f"https://production.dataviz.cnn.io/index/fearandgreed/graphdata/{CNN_FLOOR}"
 BATCH = 1000
 
 
