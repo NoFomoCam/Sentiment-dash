@@ -7,6 +7,9 @@ import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
 import PriceChart from '../Components/PriceChart';
+import DivergenceChart from '../Components/DivergenceChart';
+import WeeklyBiasChart from '../Components/WeeklyBiasChart';
+import ReadingGuide from '../Components/ReadingGuide';
 
 // Default fallback values (Jun 9 2026) — only used if market_data can't load.
 const FALLBACK = {
@@ -65,6 +68,7 @@ export default function Dashboard() {
   const [brief, setBrief] = useState('');
   const [symbols, setSymbols] = useState([]);
   const [dataDate, setDataDate] = useState(null);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     async function init() {
@@ -150,6 +154,7 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 py-6">
+      {showGuide && <ReadingGuide onClose={() => setShowGuide(false)} />}
       {/* Header */}
       <div className="dashboard-header mb-6">
         <div className="text-[9px] tracking-[3px] text-dashboard-muted mb-1">
@@ -164,6 +169,17 @@ export default function Dashboard() {
             {' '}11/11 INDICATORS LIVE
           </div>
         )}
+      </div>
+
+      {/* Controls */}
+      <div className="flex gap-2 mb-5">
+        <button
+          onClick={() => setShowGuide(true)}
+          className="px-3 py-1.5 bg-dashboard-card border border-dashboard-border text-dashboard-muted
+                     font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text hover:border-dashboard-muted"
+        >
+          ? RULES / DEFINITIONS
+        </button>
       </div>
 
       {/* Score gauge — single composite */}
@@ -197,6 +213,22 @@ export default function Dashboard() {
       <div className="mt-6">
         <SentimentChart history={history} />
       </div>
+
+      {/* Divergence analysis (separate from the candlestick price charts) */}
+      <div className="mt-6 mb-2 flex items-center gap-3">
+        <div className="flex-1 h-px bg-dashboard-border" />
+        <span className="font-mono text-[9px] text-dashboard-muted tracking-wider">DIVERGENCE ANALYSIS</span>
+        <div className="flex-1 h-px bg-dashboard-border" />
+      </div>
+      <DivergenceChart />
+
+      {/* This week — rolling 5-day bias */}
+      <div className="mt-6 mb-2 flex items-center gap-3">
+        <div className="flex-1 h-px bg-dashboard-border" />
+        <span className="font-mono text-[9px] text-dashboard-muted tracking-wider">THIS WEEK</span>
+        <div className="flex-1 h-px bg-dashboard-border" />
+      </div>
+      <WeeklyBiasChart history={history} />
 
       {/* Footer */}
       <div className="mt-8 text-center text-[9px] text-dashboard-muted tracking-wider leading-relaxed">
