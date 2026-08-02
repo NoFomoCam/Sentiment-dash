@@ -91,6 +91,7 @@ export default function Dashboard() {
   const [symbols, setSymbols] = useState([]);
   const [dataDate, setDataDate] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  const [guideTarget, setGuideTarget] = useState(null); // { label, signal } or null
 
   useEffect(() => {
     async function init() {
@@ -176,7 +177,13 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen max-w-4xl mx-auto px-4 py-6">
-      {showGuide && <ReadingGuide onClose={() => setShowGuide(false)} />}
+      {showGuide && (
+        <ReadingGuide
+          onClose={() => setShowGuide(false)}
+          openLabel={guideTarget?.label}
+          highlightSignal={guideTarget?.signal}
+        />
+      )}
       {/* Header */}
       <div className="dashboard-header mb-6">
         <div className="text-[9px] tracking-[3px] text-dashboard-muted mb-1">
@@ -196,7 +203,7 @@ export default function Dashboard() {
       {/* Controls */}
       <div className="flex gap-2 mb-5">
         <button
-          onClick={() => setShowGuide(true)}
+          onClick={() => { setGuideTarget(null); setShowGuide(true); }}
           className="px-3 py-1.5 bg-dashboard-card border border-dashboard-border text-dashboard-muted
                      font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text hover:border-dashboard-muted"
         >
@@ -210,7 +217,10 @@ export default function Dashboard() {
       </div>
 
       {/* Indicator Breakdown */}
-      <IndicatorBreakdown scores={scores} />
+      <IndicatorBreakdown
+        scores={scores}
+        onExplain={(label, signal) => { setGuideTarget({ label, signal }); setShowGuide(true); }}
+      />
 
       {/* Contrarian read — Claude brief when available, else rule-based from the numbers */}
       <div className="mt-4 bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-4">
