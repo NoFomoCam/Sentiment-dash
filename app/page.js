@@ -213,7 +213,7 @@ export default function Dashboard() {
 
       {/* Score gauge — single composite */}
       <div className="mb-6">
-        <ScoreGauge label="SENTIMENT SCORE" sublabel="0 = FEAR / BUY · 100 = GREED / SELL" score={score} zone={zone} />
+        <ScoreGauge label="SENTIMENT SCORE" sublabel="FULL 11-INDICATOR COMPOSITE" score={score} zone={zone} />
       </div>
 
       {/* Indicator Breakdown */}
