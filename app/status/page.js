@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { loadMarketFreshness } from '../../lib/supabase';
+import { loadMarketFreshness, loadCronRuns } from '../../lib/supabase';
 
 // The 15 series that feed the 11 scoring indicators, with their auto-source and
 // scoring role. Order roughly follows the indicator breakdown on the dashboard.
@@ -66,12 +66,17 @@ export default function StatusPage() {
   const [running, setRunning] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [runs, setRuns] = useState([]);
 
   async function load() {
     try {
-      const fresh = await loadMarketFreshness(SERIES.map((s) => s.sym));
+      const [fresh, cronRuns] = await Promise.all([
+        loadMarketFreshness(SERIES.map((s) => s.sym)),
+        loadCronRuns(12),
+      ]);
       const bySym = Object.fromEntries(fresh.map((f) => [f.symbol, f]));
       setRows(SERIES.map((s) => ({ ...s, ...bySym[s.sym] })));
+      setRuns(cronRuns);
     } catch (e) {
       setError(String(e));
       setRows([]);
@@ -190,6 +195,58 @@ export default function StatusPage() {
         </table>
       </div>
 
+      {/* Recent cron runs — completeness log */}
+      <div className="chart-container overflow-x-auto mb-6">
+        <div className="px-3 pt-3 text-[9px] tracking-[3px] text-dashboard-muted">RECENT RUNS · COMPLETENESS LOG</div>
+        {runs.length === 0 ? (
+          <div className="px-3 py-6 text-[10px] text-dashboard-muted font-mono">
+            No runs recorded yet. The first successful scheduled run — or a manual RUN REFRESH below — logs here.
+          </div>
+        ) : (
+          <table className="w-full text-left font-mono text-[11px] min-w-[620px] mt-2">
+            <thead>
+              <tr className="text-dashboard-muted text-[9px] tracking-wider border-b border-dashboard-border">
+                <th className="px-3 py-2">WHEN (UTC)</th>
+                <th className="px-3 py-2">DATA DATE</th>
+                <th className="px-3 py-2">COMPOSITE</th>
+                <th className="px-3 py-2">FETCHED</th>
+                <th className="px-3 py-2 text-right">WROTE</th>
+                <th className="px-3 py-2">STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.map((r) => {
+                const used = r.indicators_used;
+                const full = used != null && used >= 11;
+                const compColor = !r.ok ? 'text-dashboard-sell' : full ? 'text-dashboard-buy' : 'text-dashboard-caution';
+                const miss = (r.missing_indicators || []).filter(Boolean);
+                const f = r.fetched || {};
+                return (
+                  <tr key={r.id} className="border-b border-dashboard-border/50 align-top">
+                    <td className="px-3 py-2 text-dashboard-text whitespace-nowrap">{(r.ran_at || '').slice(0, 16).replace('T', ' ')}</td>
+                    <td className="px-3 py-2 text-dashboard-text">{r.latest_date || '—'}</td>
+                    <td className="px-3 py-2">
+                      <span className={compColor}>{used == null ? '—' : `${used}/11`}</span>
+                      {miss.length > 0 && <span className="text-dashboard-muted"> · missing {miss.join(', ')}</span>}
+                    </td>
+                    <td className="px-3 py-2 text-dashboard-muted whitespace-nowrap">y{f.yahoo ?? 0} c{f.cboe ?? 0} n{f.cnn ?? 0} w{f.wsj ?? 0}</td>
+                    <td className="px-3 py-2 text-right text-dashboard-muted">{r.rows_written ?? 0}</td>
+                    <td className="px-3 py-2">
+                      {r.ok ? <span className="text-dashboard-buy">✓ ok</span> : <span className="text-dashboard-sell">✕ {(r.error || 'error').slice(0, 44)}</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <div className="px-3 pb-3 pt-2 text-[8px] text-dashboard-muted font-mono leading-relaxed">
+          COMPOSITE = how many of the 11 indicators fed that day&apos;s score. The newest day may briefly read 9–10/11
+          because CNN Fear &amp; Greed / Put-Call publish a day late — the next run re-scores it back to 11/11. A
+          <span className="text-dashboard-caution"> persistent</span> shortfall means a source dropped out.
+        </div>
+      </div>
+
       {/* Manual refresh */}
       <div className="chart-container p-4">
         <div className="text-[9px] tracking-[3px] text-dashboard-muted mb-3">MANUAL REFRESH</div>
@@ -239,9 +296,11 @@ export default function StatusPage() {
               <div className="text-dashboard-muted">
                 scores — {result.scores.error
                   ? <span className="text-dashboard-sell">{result.scores.error}</span>
-                  : result.scores.scored > 0
-                    ? `synced ${result.scores.scored} day(s) ${result.scores.from}→${result.scores.to}`
-                    : 'up to date'}
+                  : result.scores.newDays > 0
+                    ? `${result.scores.newDays} new day(s) + re-scored recent`
+                    : result.scores.scored > 0
+                      ? `up to date (re-scored ${result.scores.scored} recent)`
+                      : 'up to date'}
               </div>
             )}
             {result.brief && (
