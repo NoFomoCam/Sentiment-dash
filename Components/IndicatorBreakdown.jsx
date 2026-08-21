@@ -10,11 +10,11 @@ const INDICATOR_LABELS = {
 };
 
 function getBarColor(score) {
-  if (score < 25) return '#22c55e';
-  if (score < 45) return '#4ade80';
-  if (score < 55) return '#eab308';
-  if (score < 70) return '#f97316';
-  return '#ef4444';
+  if (score < 25) return '#23d18b';
+  if (score < 45) return '#8fe04f';
+  if (score < 55) return '#f7b737';
+  if (score < 70) return '#fb8a3c';
+  return '#f64f68';
 }
 
 // onExplain(guideLabel, signalName) opens the Reading Guide at that indicator
@@ -26,42 +26,54 @@ export default function IndicatorBreakdown({ scores, onExplain }) {
     .sort((a, b) => (WEIGHTS[b[0]] || 0) - (WEIGHTS[a[0]] || 0));
 
   return (
-    <div className="bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[9px] tracking-[3px] text-dashboard-muted">SCORE BREAKDOWN BY WEIGHT</div>
-        <div className="text-[8px] text-dashboard-muted font-mono">tap a row to explain ⓘ</div>
+    <section className="surface p-4 sm:p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="eyebrow">Score breakdown · by weight</div>
+        <div className="font-mono text-[10px] text-dashboard-faint">tap a row ⓘ</div>
       </div>
-      <div className="space-y-1">
+
+      <div className="divide-y divide-dashboard-hairline">
         {entries.map(([key, score]) => {
           const sig = signalForScore(key, score);
           const guideLabel = KEY_TO_GUIDE[key];
           const barColor = getBarColor(score);
+          const tappable = guideLabel && sig;
+
           const Row = (
-            <div className="py-1.5">
-              <div className="flex items-center justify-between gap-2 mb-1">
-                <span className="text-[10px] text-dashboard-muted truncate text-left">
+            <div className="py-2.5">
+              <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                <span className="truncate text-left text-[12px] font-medium text-dashboard-text">
                   {INDICATOR_LABELS[key] || key}
                 </span>
-                <span className="text-[9px] font-medium shrink-0 text-right" style={{ color: sig ? sig.color : '#475569' }}>
+                <span
+                  className="shrink-0 text-right text-[11px] font-semibold"
+                  style={{ color: sig ? sig.color : '#586a86' }}
+                >
                   {sig ? sig.signal : ''}
                 </span>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-2.5 bg-dashboard-bg rounded-sm overflow-hidden">
-                  <div className="h-full rounded-sm transition-all duration-500"
-                    style={{ width: `${score}%`, backgroundColor: barColor }} />
+              <div className="flex items-center gap-2.5">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-dashboard-bg ring-1 ring-inset ring-dashboard-hairline">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${score}%`, backgroundColor: barColor, boxShadow: `0 0 10px ${barColor}66` }}
+                  />
                 </div>
-                <span className="w-7 text-right text-[10px] font-bold shrink-0" style={{ color: barColor }}>
+                <span
+                  className="w-7 shrink-0 text-right text-[13px] font-bold tabular-nums"
+                  style={{ color: barColor }}
+                >
                   {score}
                 </span>
               </div>
             </div>
           );
-          return guideLabel && sig ? (
+
+          return tappable ? (
             <button
               key={key}
               onClick={() => onExplain?.(guideLabel, sig.signal)}
-              className="w-full rounded-sm hover:bg-dashboard-bg/60 cursor-pointer"
+              className="group -mx-2 block w-[calc(100%+1rem)] cursor-pointer rounded-lg px-2 text-left transition-colors hover:bg-dashboard-elevated/70"
             >
               {Row}
             </button>
@@ -70,6 +82,6 @@ export default function IndicatorBreakdown({ scores, onExplain }) {
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }

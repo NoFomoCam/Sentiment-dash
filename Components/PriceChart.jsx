@@ -20,7 +20,7 @@ const saveLevels = (sym, prices) => {
   try { localStorage.setItem(levelsKey(sym), JSON.stringify(prices)); } catch {}
 };
 
-export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
+export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: controlledWin = null, height = 400 }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -32,7 +32,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
 
   const [chartLib, setChartLib] = useState(null);
   const [symbol, setSymbol] = useState(defaultSymbol);
-  const [win, setWin] = useState('6M');
+  const [internalWin, setInternalWin] = useState('6M');
+  const win = controlledWin ?? internalWin;
+  const setWin = setInternalWin;
   const [loading, setLoading] = useState(false);
   const [isFull, setIsFull] = useState(false);
   const [meta, setMeta] = useState(null);
@@ -67,7 +69,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
     priceLinesRef.current = loadLevels(sym).map(price => ({
       price,
       line: series.createPriceLine({
-        price, color: '#38bdf8', lineWidth: 1, lineStyle: 2,
+        price, color: '#8ea3c6', lineWidth: 1, lineStyle: 2,
         axisLabelVisible: true, title: '',
       }),
     }));
@@ -94,7 +96,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       priceLinesRef.current.push({
         price: rounded,
         line: series.createPriceLine({
-          price: rounded, color: '#38bdf8', lineWidth: 1, lineStyle: 2,
+          price: rounded, color: '#8ea3c6', lineWidth: 1, lineStyle: 2,
           axisLabelVisible: true, title: '',
         }),
       });
@@ -125,23 +127,23 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight || 400,
       layout: {
-        background: { type: ColorType.Solid, color: '#0a0f1a' },
-        textColor: '#64748b',
+        background: { type: ColorType.Solid, color: '#0b1018' },
+        textColor: '#8497b3',
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
       },
       grid: {
-        vertLines: { color: '#141c2e' },
-        horzLines: { color: '#141c2e' },
+        vertLines: { color: '#18202f' },
+        horzLines: { color: '#18202f' },
       },
       crosshair: { mode: CrosshairMode ? CrosshairMode.Normal : 0 },
-      rightPriceScale: { borderColor: '#1e293b', scaleMargins: { top: 0.12, bottom: 0.12 } },
-      timeScale: { borderColor: '#1e293b', timeVisible: false, rightOffset: 4 },
+      rightPriceScale: { borderColor: '#22304a', scaleMargins: { top: 0.12, bottom: 0.12 } },
+      timeScale: { borderColor: '#22304a', timeVisible: false, rightOffset: 4 },
     });
 
     const series = chart.addCandlestickSeries({
-      upColor: '#22c55e', downColor: '#ef4444',
-      wickUpColor: '#22c55e', wickDownColor: '#ef4444',
+      upColor: '#23d18b', downColor: '#f64f68',
+      wickUpColor: '#23d18b', wickDownColor: '#f64f68',
       borderVisible: false,
     });
 
@@ -251,7 +253,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
         </div>
 
         <div className="flex items-center gap-1">
-          {WINDOWS.map(w => (
+          {!controlledWin && WINDOWS.map(w => (
             <button
               key={w.label}
               onClick={() => setWin(w.label)}
@@ -268,7 +270,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
             title="Draw horizontal levels — click chart to add, click a line to remove"
             className={`ml-1 px-2 py-1 font-mono text-[10px] tracking-wider rounded border cursor-pointer
               ${drawMode
-                ? 'bg-sky-500/20 border-sky-400 text-sky-400'
+                ? 'bg-dashboard-brand/20 border-dashboard-brand text-dashboard-brand'
                 : 'border-dashboard-border text-dashboard-muted hover:text-dashboard-text'}`}
           >
             ✎ LEVELS
@@ -299,13 +301,13 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX' }) {
         ref={containerRef}
         className="w-full"
         style={{
-          height: isFull ? '100%' : 400,
+          height: isFull ? '100%' : height,
           flex: isFull ? '1 1 auto' : 'none',
           cursor: drawMode ? 'crosshair' : 'default',
         }}
       />
       {drawMode && (
-        <div className="mt-2 text-[9px] font-mono text-sky-400/80 tracking-wider">
+        <div className="mt-2 text-[9px] font-mono text-dashboard-brand/80 tracking-wider">
           LEVELS MODE · click to add a line · click a line to remove
         </div>
       )}

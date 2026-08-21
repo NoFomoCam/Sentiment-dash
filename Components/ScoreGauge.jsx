@@ -1,14 +1,9 @@
 'use client';
 
-// Hero for the single composite score. Form: a headline number + a diverging
-// fear<->greed meter (green -> neutral -> red) with a live marker. One axis.
-const ZONES = [
-  { key: 'BUY', color: '#22c55e' },
-  { key: 'WATCH', color: '#84cc16' },
-  { key: 'NEUTRAL', color: '#eab308' },
-  { key: 'CAUTION', color: '#f97316' },
-  { key: 'SELL', color: '#ef4444' },
-];
+// Hero for the single composite score: a headline number + a diverging
+// fear<->greed meter (green -> amber -> red) with a live marker. One axis; the
+// score's position, the zone chip, and the number all carry the reading so it
+// never depends on color alone.
 
 function meaning(score) {
   if (score < 20) return 'Extreme fear — historically a strong contrarian BUY zone.';
@@ -20,48 +15,66 @@ function meaning(score) {
   return 'Extreme greed — high sell risk; contrarian caution warranted.';
 }
 
+const METER = 'linear-gradient(90deg,#23d18b 0%,#8fe04f 27%,#f7b737 50%,#fb8a3c 73%,#f64f68 100%)';
+
 export default function ScoreGauge({ label, sublabel, score, zone }) {
   const c = zone.color;
+  const pos = Math.max(0, Math.min(100, score));
+
   return (
-    <div className="bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-5">
-      <div className="flex items-center justify-between mb-4">
+    <section className="surface p-6 sm:p-7 animate-fade-up">
+      <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-[10px] tracking-[3px] font-bold text-dashboard-muted">{label}</div>
-          <div className="text-[8px] text-dashboard-muted tracking-wider mt-0.5">{sublabel}</div>
+          <div className="eyebrow">{label}</div>
+          <div className="mt-1 text-[11px] text-dashboard-faint">{sublabel}</div>
         </div>
-        <div className="text-right">
-          <div className="text-[9px] tracking-[2px] font-extrabold" style={{ color: c }}>{zone.label}</div>
-          <div className="text-[8px] text-dashboard-muted tracking-wider">CONTRARIAN</div>
-        </div>
+        <span
+          className="pill font-semibold"
+          style={{ color: c, borderColor: `${c}55`, background: `${c}14` }}
+        >
+          <span
+            className="inline-block h-1.5 w-1.5 rounded-full"
+            style={{ background: c, boxShadow: `0 0 8px ${c}` }}
+          />
+          {zone.label}
+        </span>
       </div>
 
       {/* Headline number */}
-      <div className="flex items-end justify-center gap-1 mb-4">
-        <span className="text-6xl font-extrabold leading-none tabular-nums" style={{ color: c }}>{score}</span>
-        <span className="text-lg font-bold text-dashboard-muted mb-1">/100</span>
+      <div className="mt-4 flex items-end justify-center gap-2">
+        <span
+          className="font-black leading-none tabular-nums tracking-tight text-[84px] sm:text-[104px]"
+          style={{ color: c, textShadow: `0 0 44px ${c}40` }}
+        >
+          {score}
+        </span>
+        <span className="mb-3 text-2xl font-semibold text-dashboard-faint">/100</span>
       </div>
 
-      {/* Fear <-> Greed meter (5 diverging zones + live marker) */}
-      <div className="relative">
-        <div className="flex h-3 rounded-sm overflow-hidden gap-[2px]">
-          {ZONES.map((z) => (
-            <div key={z.key} className="flex-1" style={{ background: z.color, opacity: 0.32 }} />
-          ))}
+      {/* Fear <-> Greed meter with live marker */}
+      <div className="mt-5">
+        <div className="relative">
+          <div className="h-2.5 rounded-full" style={{ background: METER }} />
+          <div
+            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
+            style={{ left: `${pos}%` }}
+          >
+            <div
+              className="h-4 w-4 rounded-full border-2 border-dashboard-bg"
+              style={{ background: c, boxShadow: `0 0 0 2px ${c}66, 0 0 16px ${c}` }}
+            />
+          </div>
         </div>
-        {/* marker */}
-        <div className="absolute -top-1.5 -translate-x-1/2" style={{ left: `${Math.max(0, Math.min(100, score))}%` }}>
-          <div className="w-0 h-0 mx-auto" style={{ borderLeft: '5px solid transparent', borderRight: '5px solid transparent', borderTop: `7px solid ${c}` }} />
-          <div className="w-[2px] h-3 mx-auto" style={{ background: c, boxShadow: '0 0 0 1px #0a0f1a' }} />
-        </div>
-        <div className="flex justify-between mt-2 text-[8px] font-mono tracking-wider">
+        <div className="mt-3 flex justify-between font-mono text-[10px] tracking-wide">
           <span className="text-dashboard-buy">0 · FEAR / BUY</span>
+          <span className="hidden text-dashboard-faint sm:inline">NEUTRAL</span>
           <span className="text-dashboard-sell">GREED / SELL · 100</span>
         </div>
       </div>
 
-      <div className="mt-3 pt-3 border-t border-dashboard-border text-[10px] leading-relaxed text-dashboard-text text-center">
+      <p className="mt-5 border-t border-dashboard-hairline pt-4 text-center text-[13px] leading-relaxed text-dashboard-text">
         {meaning(score)}
-      </div>
-    </div>
+      </p>
+    </section>
   );
 }

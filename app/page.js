@@ -101,6 +101,84 @@ function tradingDaysBehind(dateStr) {
   return count;
 }
 
+// Gauge logo mark (matches the favicon).
+function BrandMark({ size = 34 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" className="shrink-0" aria-hidden="true">
+      <rect width="32" height="32" rx="8" fill="#10151f" stroke="#22304a" />
+      <g fill="none" strokeWidth="3.2" strokeLinecap="round">
+        <path d="M6 21 A10 10 0 0 1 11 12.34" stroke="#23d18b" />
+        <path d="M11 12.34 A10 10 0 0 1 21 12.34" stroke="#f7b737" />
+        <path d="M21 12.34 A10 10 0 0 1 26 21" stroke="#f64f68" />
+      </g>
+      <line x1="16" y1="21" x2="18.2" y2="12.9" stroke="#e9edf4" strokeWidth="1.7" strokeLinecap="round" />
+      <circle cx="16" cy="21" r="2.1" fill="#e9edf4" />
+    </svg>
+  );
+}
+
+// Data-freshness badge: green live / amber behind / amber fallback.
+function FreshnessPill({ usingFallback, behind, dataDate, refreshing }) {
+  if (usingFallback) {
+    return (
+      <span className="pill text-dashboard-caution" style={{ borderColor: '#fb8a3c55', background: '#fb8a3c14' }}>
+        ⚠ Fallback values
+      </span>
+    );
+  }
+  if (behind <= 1) {
+    return (
+      <span className="pill text-dashboard-buy" style={{ borderColor: '#23d18b44', background: '#23d18b12' }}>
+        <span className="h-1.5 w-1.5 rounded-full bg-dashboard-buy" style={{ boxShadow: '0 0 8px #23d18b' }} />
+        Live · {dataDate}{refreshing && ' · ↻'}
+      </span>
+    );
+  }
+  return (
+    <span className="pill text-dashboard-caution" style={{ borderColor: '#fb8a3c55', background: '#fb8a3c14' }}>
+      ⚠ {behind}d behind · {dataDate}
+    </span>
+  );
+}
+
+function Divider({ children }) {
+  return (
+    <div className="mb-3 mt-9 flex items-center gap-3">
+      <div className="h-px flex-1 bg-dashboard-hairline" />
+      <span className="eyebrow">{children}</span>
+      <div className="h-px flex-1 bg-dashboard-hairline" />
+    </div>
+  );
+}
+
+const ghostBtn =
+  'inline-flex items-center gap-1.5 rounded-lg border border-dashboard-border bg-dashboard-card ' +
+  'px-3 py-1.5 font-mono text-[11px] tracking-wide text-dashboard-muted transition-colors ' +
+  'hover:border-dashboard-brand/50 hover:text-dashboard-text disabled:opacity-50 disabled:cursor-not-allowed';
+
+// One shared date-window drives every chart on the page.
+const WINDOWS = ['1M', '3M', '6M', '1Y', 'ALL'];
+function WindowPicker({ win, setWin }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="eyebrow mr-1 hidden sm:inline">Window</span>
+      {WINDOWS.map((w) => (
+        <button
+          key={w}
+          onClick={() => setWin(w)}
+          className={`rounded-md border px-2.5 py-1 font-mono text-[11px] tracking-wide transition-colors ${
+            win === w
+              ? 'border-dashboard-brand/60 bg-dashboard-brand/15 text-dashboard-brand'
+              : 'border-dashboard-border text-dashboard-muted hover:text-dashboard-text'
+          }`}
+        >
+          {w}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [score, setScore] = useState(0);         // single composite (full 11 indicators)
@@ -114,6 +192,7 @@ export default function Dashboard() {
   const [reloadKey, setReloadKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
+  const [win, setWin] = useState('6M');   // shared date-window across all charts
 
   useEffect(() => {
     let cancelled = false;
@@ -198,14 +277,15 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-dashboard-muted font-mono text-sm">Loading sentiment data...</div>
+      <div className="flex min-h-screen items-center justify-center gap-3 text-dashboard-muted">
+        <BrandMark size={26} />
+        <span className="font-mono text-sm">Loading sentiment…</span>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen max-w-4xl mx-auto px-4 py-6">
+    <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
       {showGuide && (
         <ReadingGuide
           onClose={() => setShowGuide(false)}
@@ -213,114 +293,98 @@ export default function Dashboard() {
           highlightSignal={guideTarget?.signal}
         />
       )}
-      {/* Header */}
-      <div className="dashboard-header mb-6">
-        <div className="text-[9px] tracking-[3px] text-dashboard-muted mb-1">
-          SPX / NDX PRODUCTS
+
+      {/* Brand bar */}
+      <header className="mb-5 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <BrandMark />
+          <div>
+            <h1 className="text-lg font-bold leading-none tracking-tight">Sentiment Reader</h1>
+            <div className="eyebrow mt-1.5">Contrarian · SPX / NDX</div>
+          </div>
         </div>
-        <h1 className="text-2xl font-extrabold tracking-wider">
-          MARKET SENTIMENT CONSOLE
-        </h1>
-        <div className="mt-1 text-[9px] font-mono tracking-wider">
-          {usingFallback ? (
-            <span className="text-dashboard-caution">⚠ FALLBACK VALUES · LIVE MARKET DATA UNAVAILABLE</span>
-          ) : behind <= 1 ? (
-            <span className="text-dashboard-muted">
-              <span className="text-dashboard-buy">● LIVE</span> · AS OF {dataDate} · 11/11 INDICATORS
-            </span>
-          ) : (
-            <span className="text-dashboard-caution">⚠ AS OF {dataDate} · {behind} TRADING DAYS BEHIND</span>
-          )}
-          {refreshing && <span className="text-dashboard-muted animate-pulse"> · REFRESHING…</span>}
+        <FreshnessPill usingFallback={usingFallback} behind={behind} dataDate={dataDate} refreshing={refreshing} />
+      </header>
+
+      {/* Workspace controls: shared window + utilities */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <WindowPicker win={win} setWin={setWin} />
+        <div className="flex gap-2">
+          <button onClick={() => { setGuideTarget(null); setShowGuide(true); }} className={ghostBtn}>
+            ? Rules &amp; definitions
+          </button>
+          <button onClick={() => setReloadKey((k) => k + 1)} disabled={refreshing} className={ghostBtn}>
+            {refreshing ? '↻ …' : '↻ Refresh'}
+          </button>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="flex gap-2 mb-5">
-        <button
-          onClick={() => { setGuideTarget(null); setShowGuide(true); }}
-          className="px-3 py-1.5 bg-dashboard-card border border-dashboard-border text-dashboard-muted
-                     font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text hover:border-dashboard-muted"
-        >
-          ? RULES / DEFINITIONS
-        </button>
-        <button
-          onClick={() => setReloadKey((k) => k + 1)}
-          disabled={refreshing}
-          className="px-3 py-1.5 bg-dashboard-card border border-dashboard-border text-dashboard-muted
-                     font-mono text-[10px] tracking-wider rounded cursor-pointer hover:text-dashboard-text
-                     hover:border-dashboard-muted disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {refreshing ? '↻ …' : '↻ REFRESH'}
-        </button>
-      </div>
-
-      {/* Score gauge — single composite */}
-      <div className="mb-6">
-        <ScoreGauge label="SENTIMENT SCORE" sublabel="FULL 11-INDICATOR COMPOSITE" score={score} zone={zone} />
-      </div>
-
-      {/* Indicator Breakdown */}
-      <IndicatorBreakdown
-        scores={scores}
-        onExplain={(label, signal) => { setGuideTarget({ label, signal }); setShowGuide(true); }}
-      />
-
-      {/* Contrarian read — Claude brief when available, else rule-based from the numbers */}
-      <div className="mt-4 bg-gradient-to-br from-dashboard-card to-dashboard-bg border border-dashboard-border rounded-lg p-4">
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-[9px] tracking-[3px] text-dashboard-muted">TODAY&apos;S CONTRARIAN READ</div>
-          <span className={`font-mono text-[8px] tracking-wider px-1.5 py-0.5 rounded border ${
-            brief ? 'text-dashboard-buy border-dashboard-buy/40 bg-dashboard-buy/10'
-                  : 'text-dashboard-muted border-dashboard-border'}`}>
-            {brief ? '● AI READ' : 'AUTO'}
-          </span>
+      {/* Chart-first workspace: price chart centerpiece + sentiment readout rail */}
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="order-2 min-w-0 lg:order-1">
+          <PriceChart symbols={symbols} defaultSymbol="SPX" win={win} height={520} />
         </div>
-        <p className="text-[11px] text-dashboard-text leading-relaxed">
-          {brief || ruleBasedRead(score, zone, scores)}
-        </p>
-        {!brief && (
-          <p className="mt-2 text-[9px] text-dashboard-muted italic">
-            Auto-generated from the indicator scores. A written Claude read posts here each day once the API has credit.
-          </p>
-        )}
+
+        <div className="order-1 flex flex-col gap-4 lg:order-2">
+          <ScoreGauge label="Sentiment Score" sublabel="Full 11-indicator composite" score={score} zone={zone} />
+
+          <section className="surface p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="eyebrow">Today&apos;s contrarian read</div>
+              <span
+                className={`pill ${brief ? 'text-dashboard-buy' : 'text-dashboard-faint'}`}
+                style={brief ? { borderColor: '#23d18b44', background: '#23d18b12' } : { borderColor: '#22304a' }}
+              >
+                {brief ? (<><span className="h-1.5 w-1.5 rounded-full bg-dashboard-buy" />AI read</>) : 'Auto'}
+              </span>
+            </div>
+            <p className="text-[13px] leading-relaxed text-dashboard-text">
+              {brief || ruleBasedRead(score, zone, scores)}
+            </p>
+            {!brief && (
+              <p className="mt-2.5 text-[11px] italic leading-relaxed text-dashboard-faint">
+                Auto-generated from the indicator scores. A written Claude read posts here each day once the API has credit.
+              </p>
+            )}
+          </section>
+        </div>
       </div>
 
-      {/* Price Charts (raw market data) */}
-      <div className="mt-6">
-        <PriceChart symbols={symbols} defaultSymbol="VIX" />
+      {/* Indicator breakdown (full width) */}
+      <div className="mt-4">
+        <IndicatorBreakdown
+          scores={scores}
+          onExplain={(label, signal) => { setGuideTarget({ label, signal }); setShowGuide(true); }}
+        />
       </div>
 
-      {/* Sentiment Chart */}
-      <div className="mt-6">
-        <SentimentChart history={history} />
+      {/* Sentiment history — driven by the shared window */}
+      <div className="mt-4">
+        <SentimentChart history={history} win={win} />
       </div>
 
-      {/* Divergence analysis (separate from the candlestick price charts) */}
-      <div className="mt-6 mb-2 flex items-center gap-3">
-        <div className="flex-1 h-px bg-dashboard-border" />
-        <span className="font-mono text-[9px] text-dashboard-muted tracking-wider">DIVERGENCE ANALYSIS</span>
-        <div className="flex-1 h-px bg-dashboard-border" />
-      </div>
+      <Divider>Divergence analysis</Divider>
       <DivergenceChart />
 
-      {/* This week — rolling 5-day bias */}
-      <div className="mt-6 mb-2 flex items-center gap-3">
-        <div className="flex-1 h-px bg-dashboard-border" />
-        <span className="font-mono text-[9px] text-dashboard-muted tracking-wider">THIS WEEK</span>
-        <div className="flex-1 h-px bg-dashboard-border" />
-      </div>
+      <Divider>This week</Divider>
       <WeeklyBiasChart history={history} />
 
       {/* Footer */}
-      <div className="mt-8 text-center text-[9px] text-dashboard-muted tracking-wider leading-relaxed">
-        DATA AUTO-UPDATES EACH WEEKDAY AFTER THE U.S. CLOSE
-        {' · '}~6PM ET (7PM DURING DAYLIGHT TIME)
-        {dataDate && <> · LATEST {dataDate}</>}
-        <br />V2.0 · NOT FINANCIAL ADVICE
-        {' · '}
-        <a href="/status" className="underline hover:text-dashboard-text">SYSTEM STATUS</a>
-      </div>
+      <footer className="mt-10 border-t border-dashboard-hairline pt-5 text-center">
+        <div className="flex items-center justify-center gap-2 text-dashboard-muted">
+          <BrandMark size={18} />
+          <span className="text-[12px] font-semibold text-dashboard-text">Sentiment Reader</span>
+        </div>
+        <p className="mt-2 font-mono text-[10px] leading-relaxed text-dashboard-faint">
+          Auto-updates each weekday after the U.S. close · ~6PM ET
+          {dataDate && <> · latest {dataDate}</>}
+          <br />
+          Not financial advice ·{' '}
+          <a href="/status" className="text-dashboard-muted underline decoration-dashboard-border underline-offset-2 hover:text-dashboard-brand">
+            System status
+          </a>
+        </p>
+      </footer>
     </main>
   );
 }

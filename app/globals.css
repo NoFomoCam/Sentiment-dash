@@ -2,8 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-dashboard-bg text-dashboard-text font-sans antialiased;
+    /* Layered depth: a cool brand glow up top fading into deep navy. */
+    background-image:
+      radial-gradient(120% 60% at 50% -10%, rgba(142, 163, 198, 0.10), transparent 60%),
+      radial-gradient(80% 50% at 85% 0%, rgba(35, 209, 139, 0.05), transparent 55%);
+    background-attachment: fixed;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: rgba(142, 163, 198, 0.30);
+    color: #fff;
+  }
+
+  /* Quiet, on-theme scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #22304a transparent;
+  }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb {
+    background: #22304a;
+    border-radius: 8px;
+  }
+  *::-webkit-scrollbar-thumb:hover { background: #2f425f; }
+}
+
 @layer components {
+  /* The standard raised panel used across the dashboard. */
+  .surface {
+    @apply bg-gradient-to-b from-dashboard-elevated to-dashboard-card
+           border border-dashboard-border rounded-2xl shadow-card;
+  }
+
   .chart-container {
-    @apply bg-dashboard-card border border-dashboard-border rounded-lg;
+    @apply bg-dashboard-card border border-dashboard-border rounded-xl;
+  }
+
+  /* Eyebrow / section-label treatment (replaces scattered inline tracking). */
+  .eyebrow {
+    @apply font-mono text-[10px] uppercase tracking-[0.22em] text-dashboard-faint;
+  }
+
+  /* Small pill — freshness badge, tags. */
+  .pill {
+    @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1
+           font-mono text-[10px] tracking-wide;
   }
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 
-export default function SentimentChart({ history }) {
+export default function SentimentChart({ history, win = '6M' }) {
   const chartRef = useRef(null);
   const containerRef = useRef(null);
   const [chartLib, setChartLib] = useState(null);
@@ -25,26 +25,26 @@ export default function SentimentChart({ history }) {
       width: containerRef.current.clientWidth || containerRef.current.offsetWidth || (window.innerWidth - 32),
       height: 400,
       layout: {
-        background: { type: ColorType.Solid, color: '#0a1628' },
-        textColor: '#475569',
+        background: { type: ColorType.Solid, color: '#0b1018' },
+        textColor: '#8497b3',
         fontFamily: 'JetBrains Mono, monospace',
         fontSize: 10,
       },
       grid: {
-        vertLines: { color: '#1e293b', style: LineStyle.Dotted },
-        horzLines: { color: '#1e293b', style: LineStyle.Dotted },
+        vertLines: { color: '#18202f', style: LineStyle.Dotted },
+        horzLines: { color: '#18202f', style: LineStyle.Dotted },
       },
       crosshair: {
         mode: 0,
-        vertLine: { color: '#475569', labelBackgroundColor: '#1e293b' },
-        horzLine: { color: '#475569', labelBackgroundColor: '#1e293b' },
+        vertLine: { color: '#8497b3', labelBackgroundColor: '#22304a' },
+        horzLine: { color: '#8497b3', labelBackgroundColor: '#22304a' },
       },
       rightPriceScale: {
-        borderColor: '#1e293b',
+        borderColor: '#22304a',
         scaleMargins: { top: 0.1, bottom: 0.1 },
       },
       timeScale: {
-        borderColor: '#1e293b',
+        borderColor: '#22304a',
         timeVisible: false,
       },
       handleScroll: { vertTouchDrag: true },
@@ -52,14 +52,14 @@ export default function SentimentChart({ history }) {
     });
 
     const sentimentSeries = chart.addLineSeries({
-      color: '#eab308',
+      color: '#f7b737',
       lineWidth: 2,
       priceScaleId: 'right',
       title: 'Sentiment',
     });
 
     const buyZone = chart.addLineSeries({
-      color: '#22c55e',
+      color: '#23d18b',
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       priceScaleId: 'right',
@@ -67,7 +67,7 @@ export default function SentimentChart({ history }) {
     });
 
     const sellZone = chart.addLineSeries({
-      color: '#ef4444',
+      color: '#f64f68',
       lineWidth: 1,
       lineStyle: LineStyle.Dashed,
       priceScaleId: 'right',
@@ -97,7 +97,18 @@ export default function SentimentChart({ history }) {
       const times = convertedData.map(d => d.time);
       buyZone.setData(times.map(t => ({ time: t, value: 35 })));
       sellZone.setData(times.map(t => ({ time: t, value: 65 })));
-      chart.timeScale().fitContent();
+      const ts = chart.timeScale();
+      if (!win || win === 'ALL') {
+        ts.fitContent();
+      } else {
+        const daysMap = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+        const days = daysMap[win] ?? 180;
+        const lastT = times[times.length - 1];
+        const fromD = new Date(lastT);
+        fromD.setDate(fromD.getDate() - days);
+        try { ts.setVisibleRange({ from: fromD.toISOString().slice(0, 10), to: lastT }); }
+        catch { ts.fitContent(); }
+      }
     }
 
     chartRef.current = chart;
@@ -116,7 +127,7 @@ export default function SentimentChart({ history }) {
         chartRef.current = null;
       }
     };
-  }, [chartLib, history]);
+  }, [chartLib, history, win]);
 
   return (
     <div className="chart-container p-4">
