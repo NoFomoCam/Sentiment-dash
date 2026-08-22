@@ -416,7 +416,7 @@ export default function Dashboard() {
       <Divider>Divergence analysis</Divider>
       <LazySection minHeight={440}><DivergenceChart /></LazySection>
 
-      <Divider>This week</Divider>
+      <Divider>Bias trend</Divider>
       <LazySection minHeight={320}><WeeklyBiasChart history={history} /></LazySection>
 
       {/* Footer */}
