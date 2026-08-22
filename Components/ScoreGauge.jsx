@@ -17,7 +17,7 @@ function meaning(score) {
 
 const METER = 'linear-gradient(90deg,#23d18b 0%,#8fe04f 27%,#f7b737 50%,#fb8a3c 73%,#f64f68 100%)';
 
-export default function ScoreGauge({ label, sublabel, score, zone }) {
+export default function ScoreGauge({ label, sublabel, score, zone, percentile }) {
   const c = zone.color;
   const pos = Math.max(0, Math.min(100, score));
 
@@ -75,6 +75,11 @@ export default function ScoreGauge({ label, sublabel, score, zone }) {
       <p className="mt-5 border-t border-dashboard-hairline pt-4 text-center text-[13px] leading-relaxed text-dashboard-text">
         {meaning(score)}
       </p>
+      {percentile != null && (
+        <p className="mt-1.5 text-center font-mono text-[10px] tracking-wide text-dashboard-faint">
+          Higher reading than {percentile}% of the past year
+        </p>
+      )}
     </section>
   );
 }

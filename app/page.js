@@ -275,6 +275,11 @@ export default function Dashboard() {
 
   const zone = getZone(score);
   const behind = tradingDaysBehind(dataDate);
+  // Where today's score sits vs the past ~year (context for the number).
+  const yearScores = history.slice(-252).map((h) => h.eod_score ?? h.live_score).filter((v) => v != null).map(Number);
+  const percentile = yearScores.length >= 20
+    ? Math.round((100 * yearScores.filter((v) => v <= score).length) / yearScores.length)
+    : null;
 
   if (loading) {
     return (
@@ -327,7 +332,7 @@ export default function Dashboard() {
         </div>
 
         <div className="order-1 flex flex-col gap-4 lg:order-2">
-          <ScoreGauge label="Sentiment Score" sublabel="Full 11-indicator composite" score={score} zone={zone} />
+          <ScoreGauge label="Sentiment Score" sublabel="Full 11-indicator composite" score={score} zone={zone} percentile={percentile} />
 
           <section className="surface p-5">
             <div className="mb-3 flex items-center justify-between">
