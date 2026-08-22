@@ -57,3 +57,12 @@
            font-mono text-[10px] tracking-wide;
   }
 }
+
+/* Landing-page motion */
+@keyframes marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@keyframes cellpop { 0% { opacity: 0; transform: scale(0.25); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes rise { 0% { opacity: 0; transform: translateY(16px); } 100% { opacity: 1; transform: none; } }
+.marquee-track { animation: marquee 34s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track { animation: none; }
+}
