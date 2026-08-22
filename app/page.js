@@ -11,6 +11,7 @@ import PriceChart from '../Components/PriceChart';
 import DivergenceChart from '../Components/DivergenceChart';
 import DivergenceSignal from '../Components/DivergenceSignal';
 import EdgeStudy from '../Components/EdgeStudy';
+import LazySection from '../Components/LazySection';
 import { DISCLAIMER_FULL } from '../lib/legal';
 import WeeklyBiasChart from '../Components/WeeklyBiasChart';
 import ReadingGuide from '../Components/ReadingGuide';
@@ -118,6 +119,34 @@ function BrandMark({ size = 34 }) {
       <line x1="16" y1="21" x2="18.2" y2="12.9" stroke="#e9edf4" strokeWidth="1.7" strokeLinecap="round" />
       <circle cx="16" cy="21" r="2.1" fill="#e9edf4" />
     </svg>
+  );
+}
+
+// Slim bar that slides in on scroll so the current score stays in view.
+function StickyScore({ score, zone }) {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShow(window.scrollY > 340);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+  return (
+    <div
+      className={`fixed inset-x-0 top-0 z-40 border-b border-dashboard-border bg-dashboard-bg/90 backdrop-blur transition-transform duration-200 ${show ? 'translate-y-0' : '-translate-y-full'}`}
+      aria-hidden={!show}
+    >
+      <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-2 sm:px-6">
+        <div className="flex items-center gap-2">
+          <BrandMark size={18} />
+          <span className="text-[12px] font-semibold text-dashboard-text">Sentiment Reader</span>
+        </div>
+        <div className="flex items-baseline gap-2">
+          <span className="font-mono text-lg font-bold leading-none tabular-nums" style={{ color: zone.color }}>{score}</span>
+          <span className="font-mono text-[10px] tracking-wide" style={{ color: zone.color }}>{zone.label}</span>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -295,6 +324,7 @@ export default function Dashboard() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+      <StickyScore score={score} zone={zone} />
       {showGuide && (
         <ReadingGuide
           onClose={() => setShowGuide(false)}
@@ -378,16 +408,16 @@ export default function Dashboard() {
       </div>
 
       <Divider>The edge</Divider>
-      <EdgeStudy history={history} />
+      <LazySection minHeight={560}><EdgeStudy history={history} /></LazySection>
 
       <Divider>Sentiment calendar</Divider>
-      <SentimentCalendar history={history} />
+      <LazySection minHeight={480}><SentimentCalendar history={history} /></LazySection>
 
       <Divider>Divergence analysis</Divider>
-      <DivergenceChart />
+      <LazySection minHeight={440}><DivergenceChart /></LazySection>
 
       <Divider>This week</Divider>
-      <WeeklyBiasChart history={history} />
+      <LazySection minHeight={320}><WeeklyBiasChart history={history} /></LazySection>
 
       {/* Footer */}
       <footer className="mt-10 border-t border-dashboard-hairline pt-5 text-center">

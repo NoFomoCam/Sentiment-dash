@@ -284,6 +284,7 @@ export default function EdgeStudy({ history }) {
               tag={`After extreme fear (≤${thr.lo})`}
               big={A.byH[20].fear.n ? fmtPct(A.byH[20].fear.avg, 1) : '—'}
               sub={A.byH[20].fear.n ? `avg 20-day · ${A.byH[20].fear.up.toFixed(0)}% higher · ${A.byH[20].fear.n} days` : 'no days at this level in this view'}
+              delta={A.byH[20].fear.n ? <DeltaChip edge={A.fearEdge} /> : null}
             />
             <Callout
               tint={C_BASE}
@@ -296,6 +297,7 @@ export default function EdgeStudy({ history }) {
               tag={`After extreme greed (≥${thr.hi})`}
               big={A.byH[20].greed.n ? fmtPct(A.byH[20].greed.avg, 1) : '—'}
               sub={A.byH[20].greed.n ? `avg 20-day · ${A.byH[20].greed.up.toFixed(0)}% higher · ${A.byH[20].greed.n} days` : 'no days at this level in this view'}
+              delta={A.byH[20].greed.n ? <DeltaChip edge={A.greedEdge} /> : null}
             />
           </div>
 
@@ -454,13 +456,29 @@ export default function EdgeStudy({ history }) {
   );
 }
 
-function Callout({ tint, tag, big, sub }) {
+function Callout({ tint, tag, big, sub, delta }) {
   return (
     <div className="rounded-xl border border-dashboard-border bg-dashboard-bg/50 p-3">
-      <div className="font-mono text-[10px] uppercase tracking-wide" style={{ color: tint }}>{tag}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="font-mono text-[10px] uppercase tracking-wide" style={{ color: tint }}>{tag}</div>
+        {delta}
+      </div>
       <div className="mt-1 font-mono text-2xl font-bold tabular-nums" style={{ color: tint }}>{big}</div>
       <div className="mt-0.5 text-[11px] leading-tight text-dashboard-faint">{sub}</div>
     </div>
+  );
+}
+
+function DeltaChip({ edge }) {
+  if (edge == null || !isFinite(edge)) return null;
+  const pos = edge >= 0;
+  return (
+    <span
+      className="shrink-0 rounded-full px-1.5 py-0.5 font-mono text-[9px] font-semibold"
+      style={{ color: pos ? C_FEAR : C_GREED, background: pos ? 'rgba(35,209,139,0.12)' : 'rgba(246,79,104,0.12)' }}
+    >
+      {fmtPct(edge, 1)} vs avg
+    </span>
   );
 }
 
