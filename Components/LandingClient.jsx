@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { DISCLAIMER_FULL } from '../lib/legal';
 
 function useCountUp(target, ms = 1300, start = true) {
   const [v, setV] = useState(0);
@@ -90,6 +91,15 @@ function Stat({ n, suffix, label, play }) {
 
 // A month of illustrative scores for the animated calendar.
 const LEAD = 2;
+function ProofStat({ value, tint, label }) {
+  return (
+    <div className="rounded-xl border border-dashboard-border bg-dashboard-bg/50 p-4 text-center">
+      <div className="font-mono text-2xl font-bold tabular-nums sm:text-3xl" style={{ color: tint }}>{value}</div>
+      <div className="mt-1 text-[11px] leading-tight text-dashboard-faint">{label}</div>
+    </div>
+  );
+}
+
 const MDAYS = Array.from({ length: 22 }, (_, i) => 44 + Math.round(22 * Math.sin(i / 2.6) + 9 * Math.cos(i / 1.4)));
 
 export default function LandingClient() {
@@ -217,6 +227,36 @@ export default function LandingClient() {
           ))}
         </div>
         <p className="mt-4 font-mono text-[10px] text-dashboard-faint">Illustrative — the live calendar in the dashboard runs on real data, back through the years.</p>
+      </section>
+
+      {/* The proof — historical edge, with full disclosure */}
+      <section className="mt-4 rounded-2xl border border-dashboard-border bg-dashboard-card p-6 sm:p-8">
+        <div className="eyebrow">The proof · measured, not claimed</div>
+        <h2 className="mt-2 max-w-2xl text-2xl font-bold tracking-tight sm:text-3xl">When the crowd panicked, the market paid.</h2>
+        <p className="mt-2 max-w-2xl text-[14px] leading-relaxed text-dashboard-muted">
+          We matched every reading since 2007 to what the S&amp;P 500 actually did next. The pattern is real — and we’re honest about its limits.
+        </p>
+
+        <blockquote className="mt-6 border-l-2 border-dashboard-buy/60 pl-4 text-[15px] italic leading-relaxed text-dashboard-text sm:text-[17px]">
+          “After the score hit extreme fear, the S&amp;P 500 averaged{' '}
+          <span className="not-italic font-semibold text-dashboard-buy">+2.5%</span> over the next 20 trading days —
+          versus <span className="not-italic font-semibold text-dashboard-steel">+1.1%</span> on any given day.”
+        </blockquote>
+
+        <div className="mt-6 grid grid-cols-3 gap-3">
+          <ProofStat value="+2.5%" tint="#23d18b" label="after extreme fear" />
+          <ProofStat value="+1.1%" tint="#8ea3c6" label="on any given day" />
+          <ProofStat value="1,568" tint="#8ea3c6" label="days measured" />
+        </div>
+
+        <p className="mt-5 text-[13px] leading-relaxed text-dashboard-muted">
+          Fear snapped back; greed, on the other hand, tended to keep grinding — so we read a hot number as a cue to{' '}
+          <em>manage risk</em>, never as a signal to short. Every figure in the app shows its sample size and date range.
+        </p>
+
+        <p className="mt-5 border-t border-dashboard-hairline pt-4 font-mono text-[10px] leading-relaxed text-dashboard-faint">
+          {DISCLAIMER_FULL}
+        </p>
       </section>
 
       {/* Final CTA */}

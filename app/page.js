@@ -11,6 +11,7 @@ import PriceChart from '../Components/PriceChart';
 import DivergenceChart from '../Components/DivergenceChart';
 import DivergenceSignal from '../Components/DivergenceSignal';
 import EdgeStudy from '../Components/EdgeStudy';
+import { DISCLAIMER_FULL } from '../lib/legal';
 import WeeklyBiasChart from '../Components/WeeklyBiasChart';
 import ReadingGuide from '../Components/ReadingGuide';
 
@@ -402,6 +403,9 @@ export default function Dashboard() {
           <a href="/status" className="text-dashboard-muted underline decoration-dashboard-border underline-offset-2 hover:text-dashboard-brand">
             System status
           </a>
+        </p>
+        <p className="mx-auto mt-3 max-w-2xl font-mono text-[9px] leading-relaxed text-dashboard-faint/80">
+          {DISCLAIMER_FULL}
         </p>
       </footer>
     </main>

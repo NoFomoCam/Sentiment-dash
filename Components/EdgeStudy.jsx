@@ -5,12 +5,13 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import { loadMarketData } from '../lib/supabase';
+import { DISCLAIMER_SHORT } from '../lib/legal';
 
 // Does buying fear / fading greed actually pay? We join every historical
 // sentiment score to SPX's forward return N trading days later and bucket by
 // how extreme the reading was. All numbers are measured, not assumed.
 
-const HORIZONS = [1, 5, 20];
+const HORIZONS = [1, 5, 20, 60];
 const THRESHOLDS = [
   { key: 'm', lo: 40, hi: 60, label: 'Mild', sub: '≤40 / ≥60' },
   { key: 's', lo: 30, hi: 70, label: 'Strong', sub: '≤30 / ≥70' },
@@ -34,6 +35,7 @@ const upRate = (a) => (a.length ? (a.filter((x) => x > 0).length / a.length) * 1
 export default function EdgeStudy({ history }) {
   const [spx, setSpx] = useState(null);
   const [thr, setThr] = useState(THRESHOLDS[1]); // Strong (30/70) — balanced sample sizes
+  const [era, setEra] = useState('all'); // 'all' (2007+) | 'recent' (2021+, current CNN-era method)
   const [err, setErr] = useState(false);
 
   useEffect(() => {
@@ -53,6 +55,7 @@ export default function EdgeStudy({ history }) {
     spx.forEach((r, i) => idx.set(r.date, i));
     const out = [];
     for (const row of history) {
+      if (era === 'recent' && row.date < '2021-01-01') continue;
       const score = row.eod_score ?? row.live_score;
       if (score == null) continue;
       const i = idx.get(row.date);
@@ -67,7 +70,7 @@ export default function EdgeStudy({ history }) {
       out.push({ date: row.date, score, fwd });
     }
     return out;
-  }, [spx, history]);
+  }, [spx, history, era]);
 
   const A = useMemo(() => {
     if (!samples || !samples.length) return null;
@@ -117,9 +120,25 @@ export default function EdgeStudy({ history }) {
           <div className="eyebrow">The edge · measured, not claimed</div>
           <h3 className="mt-1 text-lg font-semibold text-dashboard-text">Does buying fear actually pay?</h3>
           <p className="mt-1 max-w-xl text-[13px] leading-snug text-dashboard-muted">
-            Every past reading, matched to what the S&amp;P 500 did over the next 1, 5 and 20 trading days —
+            Every past reading, matched to what the S&amp;P 500 did over the next 1, 5, 20 and 60 trading days —
             then split by how extreme the crowd was.
           </p>
+          <div className="mt-3 inline-flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-dashboard-faint">Period</span>
+            <div className="flex rounded-lg border border-dashboard-border bg-dashboard-bg/60 p-0.5">
+              {[['all', 'All · 2007+'], ['recent', 'Current method · 2021+']].map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setEra(k)}
+                  className={`rounded-md px-2.5 py-1 font-mono text-[10px] transition ${
+                    era === k ? 'bg-dashboard-border/70 text-dashboard-text' : 'text-dashboard-faint hover:text-dashboard-muted'
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
         {/* Threshold selector */}
         <div className="flex rounded-lg border border-dashboard-border bg-dashboard-bg/60 p-0.5">
@@ -227,7 +246,7 @@ export default function EdgeStudy({ history }) {
 
           {/* Detail table */}
           <div className="mt-5 overflow-x-auto">
-            <table className="w-full min-w-[440px] text-[12px]">
+            <table className="w-full min-w-[560px] text-[12px]">
               <thead>
                 <tr className="text-left font-mono text-[10px] uppercase tracking-wider text-dashboard-faint">
                   <th className="pb-2 font-normal">Signal</th>
@@ -255,10 +274,13 @@ export default function EdgeStudy({ history }) {
             </span>
           </div>
 
-          <p className="mt-3 font-mono text-[10px] leading-relaxed text-dashboard-faint">
-            {A.nAll.toLocaleString()} scored trading days, {A.from} → {A.to}. Forward returns use S&amp;P 500 closes N trading days later.
-            Extreme buckets are deliberately small — that’s the point of an extreme. Past behavior is not a guarantee of future results.
-          </p>
+          <div className="mt-4 rounded-lg border border-dashboard-hairline bg-dashboard-bg/40 px-4 py-3">
+            <p className="font-mono text-[10px] leading-relaxed text-dashboard-faint">
+              {A.nAll.toLocaleString()} scored trading days, {A.from} → {A.to}. Forward returns use S&amp;P 500 closes N trading days later;
+              extreme buckets are deliberately small — that’s the point of an extreme.
+            </p>
+            <p className="mt-2 font-mono text-[10px] leading-relaxed text-dashboard-muted">{DISCLAIMER_SHORT}</p>
+          </div>
         </>
       )}
     </div>
