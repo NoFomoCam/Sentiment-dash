@@ -361,7 +361,7 @@ export default function Dashboard() {
       {/* Chart-first workspace: price chart centerpiece + sentiment readout rail */}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="order-2 min-w-0 lg:order-1">
-          <PriceChart symbols={symbols} defaultSymbol="SPX" win={win} height={520} />
+          <PriceChart symbols={symbols} defaultSymbol="SPX" win={win} height={520} history={history} />
         </div>
 
         <div className="order-1 flex flex-col gap-4 lg:order-2">

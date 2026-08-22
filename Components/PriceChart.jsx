@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { loadMarketData, SYMBOL_LABELS } from '../lib/supabase';
 
 const WINDOWS = [
@@ -61,7 +61,7 @@ function computeSMA(candles, period) {
   return out;
 }
 
-export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: controlledWin = null, height = 400 }) {
+export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: controlledWin = null, height = 400, history = [] }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
@@ -91,6 +91,26 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const [sma50On, setSma50On] = useState(false);
   const [sma200On, setSma200On] = useState(false);
   const [hot, setHot] = useState(false); // hovering a drawing endpoint (cursor mode)
+  const [signalsOn, setSignalsOn] = useState(true);
+
+  // Past sentiment extremes as chart markers: fear (green ▲ below) / greed (red ▼ above).
+  const markers = useMemo(() => {
+    if (!history || !history.length) return [];
+    const out = [];
+    for (const h of history) {
+      const s = h.eod_score ?? h.live_score;
+      if (s == null || !h.date) continue;
+      if (s <= 30) out.push({ time: h.date, position: 'belowBar', color: '#23d18b', shape: 'arrowUp' });
+      else if (s >= 70) out.push({ time: h.date, position: 'aboveBar', color: '#f64f68', shape: 'arrowDown' });
+    }
+    return out;
+  }, [history]);
+
+  const applyMarkers = useCallback(() => {
+    const series = seriesRef.current;
+    if (!series) return;
+    try { series.setMarkers(signalsOn ? markers : []); } catch {}
+  }, [signalsOn, markers]);
 
   const refreshCount = useCallback(() => {
     setDrawCount(priceLinesRef.current.length + drawingsRef.current.length);
@@ -390,6 +410,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
       const candles = rows.map((r) => ({ time: r.date, open: +r.open, high: +r.high, low: +r.low, close: +r.close }));
       dataRef.current = candles;
       seriesRef.current.setData(candles);
+      applyMarkers();
       applyWindow(win);
       redrawLevels(symbol);
       redrawDrawings(symbol);
@@ -402,6 +423,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
 
   useEffect(() => { applyWindow(win); redrawOverlay(); }, [win, applyWindow, redrawOverlay]);
   useEffect(() => { updateSMAs(); }, [updateSMAs, meta]);
+  useEffect(() => { applyMarkers(); }, [applyMarkers, meta]);
 
   useEffect(() => {
     const onFs = () => setIsFull(!!document.fullscreenElement);
@@ -454,6 +476,13 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
             style={sma200On ? { color: '#f0a742', borderColor: '#f0a74288', background: '#f0a74218' } : undefined}>
             MA200
           </button>
+          {history.length > 0 && (
+            <button onClick={() => setSignalsOn((v) => !v)} title="Mark past fear (▲) and greed (▼) extremes on the chart"
+              className="rounded border border-dashboard-border px-2 py-1 font-mono text-[10px] tracking-wider text-dashboard-muted hover:text-dashboard-text"
+              style={signalsOn ? { color: '#8fe04f', borderColor: '#8fe04f88', background: '#8fe04f18' } : undefined}>
+              ⚑ Signals
+            </button>
+          )}
           {drawCount > 0 && (
             <button onClick={clearAll} title="Clear all drawings for this symbol" className="rounded border border-dashboard-border px-2 py-1 font-mono text-[10px] text-dashboard-muted hover:text-dashboard-sell">
               ✕{drawCount}
