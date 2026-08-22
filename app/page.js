@@ -9,6 +9,7 @@ import SentimentChart from '../Components/SentimentChart';
 import SentimentCalendar from '../Components/SentimentCalendar';
 import PriceChart from '../Components/PriceChart';
 import DivergenceChart from '../Components/DivergenceChart';
+import DivergenceSignal from '../Components/DivergenceSignal';
 import WeeklyBiasChart from '../Components/WeeklyBiasChart';
 import ReadingGuide from '../Components/ReadingGuide';
 
@@ -362,6 +363,11 @@ export default function Dashboard() {
           scores={scores}
           onExplain={(label, signal) => { setGuideTarget({ label, signal }); setShowGuide(true); }}
         />
+      </div>
+
+      {/* Our own signal: sentiment vs price divergence */}
+      <div className="mt-4">
+        <DivergenceSignal history={history} />
       </div>
 
       {/* Sentiment history — driven by the shared window */}
