@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { loadMarketData, SYMBOL_LABELS, CLOSE_ONLY } from '../lib/supabase';
+import { loadMarketData, SYMBOL_LABELS } from '../lib/supabase';
 
 const WINDOWS = [
+  { label: '1W', days: 7 },
   { label: '1M', days: 30 },
   { label: '3M', days: 90 },
   { label: '6M', days: 180 },
@@ -12,43 +13,52 @@ const WINDOWS = [
 ];
 
 const DRAW_COLOR = '#8ea3c6';
+const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 // Per-symbol persistence (localStorage). Per-user isolation arrives with auth (Phase 3).
-const levelsKey = (sym) => `sentiment_levels_${sym}`;
-const trendKey = (sym) => `sentiment_trends_${sym}`;
+const levelsKey = (s) => `sentiment_levels_${s}`;
+const drawKey = (s) => `sentiment_draw_${s}`;
+const oldTrendKey = (s) => `sentiment_trends_${s}`;
 const loadJson = (k) => { try { return JSON.parse(localStorage.getItem(k) || '[]'); } catch { return []; } };
 const saveJson = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-// Tool rail definition.
+// Drawings are typed: { type, points:[{logical,price}], text? }.
+// (trend/ray/fib use 2 points, text uses 1.) Migrate the old flat trend format.
+function loadDrawings(sym) {
+  const cur = loadJson(drawKey(sym));
+  if (cur.length) return cur;
+  const old = loadJson(oldTrendKey(sym));
+  return old.map((seg) => ({ type: 'trend', points: seg }));
+}
+
 const TOOLS = [
-  { id: 'cursor', glyph: '↖', title: 'Cursor — pan & zoom' },
+  { id: 'cursor', glyph: '⤢', title: 'Cursor — pan & zoom' },
   { id: 'trend', glyph: '╱', title: 'Trend line — click start, click end' },
+  { id: 'ray', glyph: '↗', title: 'Ray — extends past the 2nd point' },
+  { id: 'fib', glyph: '≣', title: 'Fib retracement — click high, click low' },
   { id: 'horizontal', glyph: '─', title: 'Horizontal level — click to place' },
+  { id: 'text', glyph: 'T', title: 'Text — click to place a note' },
   { id: 'eraser', glyph: '⌫', title: 'Erase — click a drawing to remove' },
 ];
 
-// Distance from point p to segment ab (for eraser hit-testing).
 function distToSeg(px, py, ax, ay, bx, by) {
   const dx = bx - ax, dy = by - ay;
   const len2 = dx * dx + dy * dy;
   let t = len2 ? ((px - ax) * dx + (py - ay) * dy) / len2 : 0;
   t = Math.max(0, Math.min(1, t));
-  const cx = ax + t * dx, cy = ay + t * dy;
-  return Math.hypot(px - cx, py - cy);
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
-export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: controlledWin = null, height = 400 }) {
+export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: controlledWin = null, height = 400 }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const chartRef = useRef(null);
-  const seriesRef = useRef(null);        // active series (candles or line)
-  const candleSeriesRef = useRef(null);
-  const lineSeriesRef = useRef(null);
+  const seriesRef = useRef(null);
   const dataRef = useRef([]);
   const priceLinesRef = useRef([]);   // [{ price, line }]
-  const trendsRef = useRef([]);       // [[{logical, price}, {logical, price}], ...]
-  const pendingRef = useRef(null);    // first point of an in-progress trend line
+  const drawingsRef = useRef([]);     // [{ type, points, text? }]
+  const pendingRef = useRef(null);    // in-progress { type, points:[p1] }
   const toolRef = useRef('cursor');
   const symbolRef = useRef(defaultSymbol);
 
@@ -61,20 +71,16 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
   const [isFull, setIsFull] = useState(false);
   const [meta, setMeta] = useState(null);
   const [tool, setTool] = useState('cursor');
-  const [drawCount, setDrawCount] = useState(0); // levels + trends, for the clear affordance
-
-  useEffect(() => { toolRef.current = tool; pendingRef.current = null; redrawOverlay(); }, [tool]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
+  const [drawCount, setDrawCount] = useState(0);
 
   const refreshCount = useCallback(() => {
-    setDrawCount(priceLinesRef.current.length + trendsRef.current.length);
+    setDrawCount(priceLinesRef.current.length + drawingsRef.current.length);
   }, []);
 
   // ---- Horizontal levels (native price lines) ----
   const makeLine = (series, price) => series.createPriceLine({
     price, color: DRAW_COLOR, lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: '',
   });
-
   const redrawLevels = useCallback((sym) => {
     const series = seriesRef.current;
     if (!series) return;
@@ -82,7 +88,6 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     priceLinesRef.current = loadJson(levelsKey(sym)).map((price) => ({ price, line: makeLine(series, price) }));
     refreshCount();
   }, [refreshCount]);
-
   const addLevelAt = useCallback((y) => {
     const series = seriesRef.current;
     if (!series) return;
@@ -94,7 +99,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     refreshCount();
   }, [refreshCount]);
 
-  // ---- Trend lines (canvas overlay, stored in logical/price data coords) ----
+  // ---- Canvas overlay drawings ----
   const redrawOverlay = useCallback((preview) => {
     const cv = overlayRef.current, chart = chartRef.current, series = seriesRef.current, el = containerRef.current;
     if (!cv || !chart || !series || !el) return;
@@ -107,42 +112,83 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     const ts = chart.timeScale();
-    const toXY = (p) => {
+    const xy = (p) => {
       const x = ts.logicalToCoordinate(p.logical);
-      const yy = series.priceToCoordinate(p.price);
-      return (x == null || yy == null) ? null : [x, yy];
+      const y = series.priceToCoordinate(p.price);
+      return (x == null || y == null) ? null : [x, y];
     };
-    ctx.lineWidth = 1.6;
-    ctx.strokeStyle = DRAW_COLOR;
-    ctx.fillStyle = DRAW_COLOR;
-    for (const seg of trendsRef.current) {
-      const a = toXY(seg[0]), b = toXY(seg[1]);
-      if (!a || !b) continue;
-      ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
-      for (const pt of [a, b]) { ctx.beginPath(); ctx.arc(pt[0], pt[1], 2.5, 0, Math.PI * 2); ctx.fill(); }
-    }
-    // in-progress preview
-    if (pendingRef.current && preview) {
-      const a = toXY(pendingRef.current);
-      if (a) {
-        ctx.setLineDash([4, 3]);
-        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(preview[0], preview[1]); ctx.stroke();
-        ctx.setLineDash([]);
+    ctx.font = '11px ui-monospace, monospace';
+    ctx.textBaseline = 'middle';
+
+    const drawOne = (d, dashed) => {
+      ctx.strokeStyle = DRAW_COLOR; ctx.fillStyle = DRAW_COLOR; ctx.lineWidth = 1.6;
+      if (dashed) ctx.setLineDash([4, 3]); else ctx.setLineDash([]);
+      if (d.type === 'text') {
+        const a = xy(d.points[0]); if (!a) return;
+        ctx.fillStyle = '#e9edf4';
+        ctx.fillText(d.text || '', a[0] + 6, a[1]);
+        ctx.fillStyle = DRAW_COLOR;
         ctx.beginPath(); ctx.arc(a[0], a[1], 2.5, 0, Math.PI * 2); ctx.fill();
+        return;
       }
+      const a = xy(d.points[0]), b = xy(d.points[1] || d.points[0]);
+      if (!a || !b) return;
+      if (d.type === 'trend') {
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      } else if (d.type === 'ray') {
+        let ex = b[0], ey = b[1];
+        if (b[0] !== a[0]) {
+          const tx = b[0] > a[0] ? w : 0;
+          const tt = (tx - a[0]) / (b[0] - a[0]);
+          if (tt > 1) { ex = tx; ey = a[1] + tt * (b[1] - a[1]); }
+        }
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(ex, ey); ctx.stroke();
+      } else if (d.type === 'fib') {
+        const p0 = d.points[0].price, p1 = d.points[1].price;
+        const x0 = Math.min(a[0], b[0]);
+        for (const lvl of FIB) {
+          const yy = series.priceToCoordinate(p0 + (p1 - p0) * lvl);
+          if (yy == null) continue;
+          ctx.globalAlpha = lvl === 0 || lvl === 1 ? 0.9 : 0.45;
+          ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(w, yy); ctx.stroke();
+          ctx.globalAlpha = 0.8;
+          ctx.fillText(lvl.toFixed(3), x0 + 4, yy - 6);
+        }
+        ctx.globalAlpha = 1;
+      }
+      // endpoint handles
+      ctx.setLineDash([]);
+      for (const pt of [a, b]) { ctx.beginPath(); ctx.arc(pt[0], pt[1], 2.5, 0, Math.PI * 2); ctx.fill(); }
+    };
+
+    for (const d of drawingsRef.current) drawOne(d, false);
+    if (pendingRef.current && preview) {
+      drawOne({ type: pendingRef.current.type, points: [pendingRef.current.points[0], preview.p] }, true);
     }
+    ctx.setLineDash([]);
   }, []);
 
-  const redrawTrends = useCallback((sym) => {
-    trendsRef.current = loadJson(trendKey(sym));
+  const redrawDrawings = useCallback((sym) => {
+    drawingsRef.current = loadDrawings(sym);
     pendingRef.current = null;
     redrawOverlay();
     refreshCount();
   }, [redrawOverlay, refreshCount]);
 
+  const saveDrawings = useCallback(() => {
+    saveJson(drawKey(symbolRef.current), drawingsRef.current);
+    refreshCount();
+  }, [refreshCount]);
+
   const localXY = (e) => {
     const r = containerRef.current.getBoundingClientRect();
     return [e.clientX - r.left, e.clientY - r.top];
+  };
+  const toDataPoint = (x, y) => {
+    const chart = chartRef.current, series = seriesRef.current;
+    const logical = chart.timeScale().coordinateToLogical(x);
+    const price = series.coordinateToPrice(y);
+    return (logical == null || price == null) ? null : { logical, price };
   };
 
   const onOverlayDown = useCallback((e) => {
@@ -152,24 +198,20 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     const t = toolRef.current;
 
     if (t === 'eraser') {
-      // trend lines first
       const ts = chart.timeScale();
-      const hitIdx = trendsRef.current.findIndex((seg) => {
-        const ax = ts.logicalToCoordinate(seg[0].logical), ay = series.priceToCoordinate(seg[0].price);
-        const bx = ts.logicalToCoordinate(seg[1].logical), by = series.priceToCoordinate(seg[1].price);
-        return ax != null && ay != null && bx != null && by != null && distToSeg(x, y, ax, ay, bx, by) <= 6;
+      const px = (p) => { const cx = ts.logicalToCoordinate(p.logical), cy = series.priceToCoordinate(p.price); return (cx == null || cy == null) ? null : [cx, cy]; };
+      const idx = drawingsRef.current.findIndex((d) => {
+        if (d.type === 'text') { const a = px(d.points[0]); return a && Math.hypot(x - a[0], y - a[1]) <= 12; }
+        const a = px(d.points[0]), b = px(d.points[1] || d.points[0]);
+        if (!a || !b) return false;
+        if (d.type === 'fib') {
+          const p0 = d.points[0].price, p1 = d.points[1].price;
+          return FIB.some((lvl) => { const yy = series.priceToCoordinate(p0 + (p1 - p0) * lvl); return yy != null && Math.abs(y - yy) <= 5 && x >= Math.min(a[0], b[0]) - 4; });
+        }
+        return distToSeg(x, y, a[0], a[1], b[0], b[1]) <= 6;
       });
-      if (hitIdx >= 0) {
-        trendsRef.current.splice(hitIdx, 1);
-        saveJson(trendKey(symbolRef.current), trendsRef.current);
-        redrawOverlay(); refreshCount();
-        return;
-      }
-      // then horizontal levels
-      const pl = priceLinesRef.current.find((p) => {
-        const c = series.priceToCoordinate(p.price);
-        return c != null && Math.abs(c - y) <= 6;
-      });
+      if (idx >= 0) { drawingsRef.current.splice(idx, 1); saveDrawings(); redrawOverlay(); return; }
+      const pl = priceLinesRef.current.find((p) => { const c = series.priceToCoordinate(p.price); return c != null && Math.abs(c - y) <= 6; });
       if (pl) {
         try { series.removePriceLine(pl.line); } catch {}
         priceLinesRef.current = priceLinesRef.current.filter((p) => p !== pl);
@@ -179,24 +221,38 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
       return;
     }
 
-    if (t === 'trend') {
-      const logical = chart.timeScale().coordinateToLogical(x);
-      const price = series.coordinateToPrice(y);
-      if (logical == null || price == null) return;
-      if (!pendingRef.current) {
-        pendingRef.current = { logical, price };
-      } else {
-        trendsRef.current.push([pendingRef.current, { logical, price }]);
-        pendingRef.current = null;
-        saveJson(trendKey(symbolRef.current), trendsRef.current);
-        refreshCount();
+    if (t === 'horizontal') { addLevelAt(y); return; }
+
+    if (t === 'text') {
+      const dp = toDataPoint(x, y);
+      if (!dp) return;
+      const txt = window.prompt('Text label:');
+      if (txt && txt.trim()) {
+        drawingsRef.current.push({ type: 'text', points: [dp], text: txt.trim() });
+        saveDrawings();
+        redrawOverlay();
       }
-      redrawOverlay();
+      return;
     }
-  }, [redrawOverlay, refreshCount]);
+
+    // 2-point tools: trend / ray / fib
+    const dp = toDataPoint(x, y);
+    if (!dp) return;
+    if (!pendingRef.current) {
+      pendingRef.current = { type: t, points: [dp] };
+    } else {
+      drawingsRef.current.push({ type: pendingRef.current.type, points: [pendingRef.current.points[0], dp] });
+      pendingRef.current = null;
+      saveDrawings();
+    }
+    redrawOverlay();
+  }, [addLevelAt, redrawOverlay, saveDrawings, refreshCount]);
 
   const onOverlayMove = useCallback((e) => {
-    if (toolRef.current === 'trend' && pendingRef.current) redrawOverlay(localXY(e));
+    if (!pendingRef.current) return;
+    const [x, y] = localXY(e);
+    const dp = toDataPoint(x, y);
+    if (dp) redrawOverlay({ p: dp });
   }, [redrawOverlay]);
 
   const applyWindow = useCallback((label) => {
@@ -215,21 +271,22 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     const series = seriesRef.current;
     if (series) priceLinesRef.current.forEach((pl) => { try { series.removePriceLine(pl.line); } catch {} });
     priceLinesRef.current = [];
-    trendsRef.current = [];
+    drawingsRef.current = [];
     pendingRef.current = null;
     saveJson(levelsKey(symbolRef.current), []);
-    saveJson(trendKey(symbolRef.current), []);
+    saveJson(drawKey(symbolRef.current), []);
     redrawOverlay();
     refreshCount();
   }, [redrawOverlay, refreshCount]);
 
+  useEffect(() => { toolRef.current = tool; pendingRef.current = null; redrawOverlay(); }, [tool, redrawOverlay]);
+  useEffect(() => { symbolRef.current = symbol; }, [symbol]);
   useEffect(() => { import('lightweight-charts').then(setChartLib); }, []);
 
   // Create the chart once.
   useEffect(() => {
     if (!chartLib || !containerRef.current) return;
     const { createChart, ColorType, CrosshairMode } = chartLib;
-
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight || 400,
@@ -239,26 +296,14 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
       rightPriceScale: { borderColor: '#22304a', scaleMargins: { top: 0.12, bottom: 0.12 } },
       timeScale: { borderColor: '#22304a', timeVisible: false, rightOffset: 4 },
     });
-
-    const candleSeries = chart.addCandlestickSeries({
+    const series = chart.addCandlestickSeries({
       upColor: '#23d18b', downColor: '#f64f68', wickUpColor: '#23d18b', wickDownColor: '#f64f68', borderVisible: false,
     });
-    const lineSeries = chart.addLineSeries({ color: '#8ea3c6', lineWidth: 2, lastValueVisible: true, priceLineVisible: false });
-
-    // Native click adds a horizontal level (only in horizontal mode; canvas is
-    // pointer-events:none then so the chart receives the click).
-    chart.subscribeClick((param) => {
-      if (toolRef.current === 'horizontal' && param.point) addLevelAt(param.point.y);
-    });
-
+    chart.subscribeClick((param) => { if (toolRef.current === 'horizontal' && param.point) addLevelAt(param.point.y); });
     const redraw = () => redrawOverlay();
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
-
     chartRef.current = chart;
-    candleSeriesRef.current = candleSeries;
-    lineSeriesRef.current = lineSeries;
-    seriesRef.current = candleSeries;
-
+    seriesRef.current = series;
     const ro = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight || 400 });
@@ -266,14 +311,12 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
       }
     });
     ro.observe(containerRef.current);
-
     return () => {
       ro.disconnect();
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(redraw); } catch {}
       chart.remove();
       chartRef.current = null; seriesRef.current = null;
-      candleSeriesRef.current = null; lineSeriesRef.current = null;
-      priceLinesRef.current = []; trendsRef.current = [];
+      priceLinesRef.current = []; drawingsRef.current = [];
     };
   }, [chartLib, addLevelAt, redrawOverlay]);
 
@@ -283,29 +326,19 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     let cancelled = false;
     setLoading(true);
     loadMarketData(symbol).then((rows) => {
-      if (cancelled || !candleSeriesRef.current) return;
-      if (CLOSE_ONLY.has(symbol)) {
-        const pts = rows.map((r) => ({ time: r.date, value: +r.close }));
-        lineSeriesRef.current.setData(pts);
-        candleSeriesRef.current.setData([]);
-        dataRef.current = pts;
-        seriesRef.current = lineSeriesRef.current;
-      } else {
-        const candles = rows.map((r) => ({ time: r.date, open: +r.open, high: +r.high, low: +r.low, close: +r.close }));
-        candleSeriesRef.current.setData(candles);
-        lineSeriesRef.current.setData([]);
-        dataRef.current = candles;
-        seriesRef.current = candleSeriesRef.current;
-      }
+      if (cancelled || !seriesRef.current) return;
+      const candles = rows.map((r) => ({ time: r.date, open: +r.open, high: +r.high, low: +r.low, close: +r.close }));
+      dataRef.current = candles;
+      seriesRef.current.setData(candles);
       applyWindow(win);
       redrawLevels(symbol);
-      redrawTrends(symbol);
-      const last = rows[rows.length - 1], prev = rows[rows.length - 2];
-      setMeta(last ? { close: +last.close, chg: prev ? ((+last.close - +prev.close) / +prev.close) * 100 : 0, date: last.date } : null);
+      redrawDrawings(symbol);
+      const last = candles[candles.length - 1], prev = candles[candles.length - 2];
+      setMeta(last ? { close: last.close, chg: prev ? ((last.close - prev.close) / prev.close) * 100 : 0, date: last.time } : null);
       setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [symbol, chartLib, applyWindow, redrawLevels, redrawTrends]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [symbol, chartLib, applyWindow, redrawLevels, redrawDrawings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { applyWindow(win); redrawOverlay(); }, [win, applyWindow, redrawOverlay]);
 
@@ -314,7 +347,6 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     document.addEventListener('fullscreenchange', onFs);
     return () => document.removeEventListener('fullscreenchange', onFs);
   }, []);
-
   const toggleFull = () => {
     const el = wrapperRef.current;
     if (!document.fullscreenElement) el?.requestFullscreen?.();
@@ -323,18 +355,14 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
 
   const chg = meta?.chg ?? 0;
   const chgColor = chg > 0 ? 'text-dashboard-buy' : chg < 0 ? 'text-dashboard-sell' : 'text-dashboard-muted';
-  const drawing = tool === 'trend' || tool === 'eraser';
+  const drawing = tool !== 'cursor';
 
   return (
     <div ref={wrapperRef} className={isFull ? 'fixed inset-0 z-50 flex flex-col bg-dashboard-bg p-4' : 'chart-container p-4'}>
-      {/* Top controls */}
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
-          <select
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            className="cursor-pointer rounded border border-dashboard-border bg-dashboard-card px-2 py-1 font-mono text-xs tracking-wider text-dashboard-text focus:border-dashboard-brand focus:outline-none"
-          >
+          <select value={symbol} onChange={(e) => setSymbol(e.target.value)}
+            className="cursor-pointer rounded border border-dashboard-border bg-dashboard-card px-2 py-1 font-mono text-xs tracking-wider text-dashboard-text focus:border-dashboard-brand focus:outline-none">
             {(symbols.length ? symbols : [symbol]).map((s) => (
               <option key={s} value={s}>{SYMBOL_LABELS[s] ? `${s} · ${SYMBOL_LABELS[s]}` : s}</option>
             ))}
@@ -347,14 +375,10 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
           )}
           {loading && <span className="animate-pulse font-mono text-[10px] text-dashboard-muted">LOADING…</span>}
         </div>
-
         <div className="flex items-center gap-1">
           {!controlledWin && WINDOWS.map((w) => (
-            <button
-              key={w.label}
-              onClick={() => setWin(w.label)}
-              className={`rounded border px-2 py-1 font-mono text-[10px] tracking-wider ${win === w.label ? 'border-dashboard-brand bg-dashboard-brand/20 text-dashboard-brand' : 'border-dashboard-border text-dashboard-muted hover:text-dashboard-text'}`}
-            >
+            <button key={w.label} onClick={() => setWin(w.label)}
+              className={`rounded border px-2 py-1 font-mono text-[10px] tracking-wider ${win === w.label ? 'border-dashboard-brand bg-dashboard-brand/20 text-dashboard-brand' : 'border-dashboard-border text-dashboard-muted hover:text-dashboard-text'}`}>
               {w.label}
             </button>
           ))}
@@ -369,17 +393,11 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
         </div>
       </div>
 
-      {/* Tool rail + chart */}
       <div className="flex gap-2" style={{ flex: isFull ? '1 1 auto' : 'none' }}>
         <div className="flex flex-col gap-1.5 rounded-lg border border-dashboard-border bg-dashboard-card/60 p-1.5">
           {TOOLS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTool(t.id)}
-              title={t.title}
-              aria-pressed={tool === t.id}
-              className={`flex h-8 w-8 items-center justify-center rounded-md border text-[15px] leading-none transition-colors ${tool === t.id ? 'border-dashboard-brand bg-dashboard-brand/15 text-dashboard-brand' : 'border-transparent text-dashboard-muted hover:bg-dashboard-elevated hover:text-dashboard-text'}`}
-            >
+            <button key={t.id} onClick={() => setTool(t.id)} title={t.title} aria-pressed={tool === t.id}
+              className={`flex h-8 w-8 items-center justify-center rounded-md border text-[15px] leading-none transition-colors ${tool === t.id ? 'border-dashboard-brand bg-dashboard-brand/15 text-dashboard-brand' : 'border-transparent text-dashboard-muted hover:bg-dashboard-elevated hover:text-dashboard-text'}`}>
               {t.glyph}
             </button>
           ))}
@@ -387,21 +405,20 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
 
         <div className="relative min-w-0 flex-1" style={{ height: isFull ? '100%' : height }}>
           <div ref={containerRef} className="absolute inset-0" style={{ cursor: drawing ? 'crosshair' : 'default' }} />
-          <canvas
-            ref={overlayRef}
-            onMouseDown={onOverlayDown}
-            onMouseMove={onOverlayMove}
+          <canvas ref={overlayRef} onMouseDown={onOverlayDown} onMouseMove={onOverlayMove}
             className="absolute inset-0 z-10"
-            style={{ pointerEvents: drawing ? 'auto' : 'none', cursor: drawing ? 'crosshair' : 'default' }}
-          />
+            style={{ pointerEvents: drawing ? 'auto' : 'none', cursor: drawing ? 'crosshair' : 'default' }} />
         </div>
       </div>
 
       {tool !== 'cursor' && (
         <div className="mt-2 font-mono text-[9px] tracking-wider text-dashboard-brand/80">
           {tool === 'trend' && 'TREND · click start point, then click end point'}
+          {tool === 'ray' && 'RAY · click start, then a 2nd point — extends to the edge'}
+          {tool === 'fib' && 'FIB · click the swing high, then the swing low'}
           {tool === 'horizontal' && 'LEVEL · click the chart to place a horizontal line'}
-          {tool === 'eraser' && 'ERASE · click a trend line or level to remove it'}
+          {tool === 'text' && 'TEXT · click where you want a note, then type'}
+          {tool === 'eraser' && 'ERASE · click a drawing to remove it'}
         </div>
       )}
     </div>

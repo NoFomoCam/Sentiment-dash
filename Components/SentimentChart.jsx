@@ -101,7 +101,7 @@ export default function SentimentChart({ history, win = '6M' }) {
       if (!win || win === 'ALL') {
         ts.fitContent();
       } else {
-        const daysMap = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
+        const daysMap = { '1W': 7, '1M': 30, '3M': 90, '6M': 180, '1Y': 365 };
         const days = daysMap[win] ?? 180;
         const lastT = times[times.length - 1];
         const fromD = new Date(lastT);

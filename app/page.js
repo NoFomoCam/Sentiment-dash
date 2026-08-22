@@ -157,7 +157,7 @@ const ghostBtn =
   'hover:border-dashboard-brand/50 hover:text-dashboard-text disabled:opacity-50 disabled:cursor-not-allowed';
 
 // One shared date-window drives every chart on the page.
-const WINDOWS = ['1M', '3M', '6M', '1Y', 'ALL'];
+const WINDOWS = ['1W', '1M', '3M', '6M', '1Y', 'ALL'];
 function WindowPicker({ win, setWin }) {
   return (
     <div className="flex items-center gap-1">

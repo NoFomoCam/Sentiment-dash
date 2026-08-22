@@ -11,15 +11,14 @@ import { loadDivergenceData } from '../lib/supabase';
 const LC = '#8ea3c6'; // steel — left series (solid)
 const RC = '#f7b737'; // amber — right series (dashed)
 const PAIRS = [
-  { id: 'spx-ndx', left: 'spx', right: 'ndx', leftLabel: 'SPX', rightLabel: 'NDX' },
-  { id: 'spy-qqq', left: 'spy', right: 'qqq', leftLabel: 'SPY', rightLabel: 'QQQ' },
-  { id: 'spx-rsp', left: 'spx', right: 'rsp', leftLabel: 'SPX', rightLabel: 'RSP' },
-  { id: 'qqq-nvda', left: 'qqq', right: 'nvda', leftLabel: 'QQQ', rightLabel: 'NVDA' },
+  { id: 'spx-ndx', left: 'spx', right: 'ndx', leftLabel: 'SPX', rightLabel: 'NDX' },   // broad vs tech
+  { id: 'spx-rsp', left: 'spx', right: 'rsp', leftLabel: 'SPX', rightLabel: 'RSP' },   // cap vs equal-weight
+  { id: 'ndx-nvda', left: 'ndx', right: 'nvda', leftLabel: 'NDX', rightLabel: 'NVDA' }, // tech vs its leader
   { id: 'spx-vix', left: 'spx', right: 'vix', leftLabel: 'SPX', rightLabel: 'VIX' },
   { id: 'spx-gold', left: 'spx', right: 'gld', leftLabel: 'SPX', rightLabel: 'GLD' },
   { id: 'nvda-smh', left: 'nvda', right: 'smh', leftLabel: 'NVDA', rightLabel: 'SMH' },
 ].map((p) => ({ ...p, label: `${p.leftLabel} vs ${p.rightLabel}`, leftColor: LC, rightColor: RC }));
-const SYMBOLS = ['SPX', 'NDX', 'SPY', 'QQQ', 'RSP', 'VIX', 'GLD', 'NVDA', 'SMH'];
+const SYMBOLS = ['SPX', 'NDX', 'RSP', 'NVDA', 'VIX', 'GLD', 'SMH'];
 const RANGES = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '5Y': 1825 };
 
 const startFor = (days) => {
