@@ -32,6 +32,29 @@ function median(a) {
 }
 const upRate = (a) => (a.length ? (a.filter((x) => x > 0).length / a.length) * 100 : 0);
 
+// Full-spectrum score buckets for the heatmap grid.
+const GRID_BUCKETS = [
+  { key: '< 20', lo: 0, hi: 20, mood: 'fear' },
+  { key: '20–30', lo: 20, hi: 30, mood: 'fear' },
+  { key: '30–40', lo: 30, hi: 40, mood: 'fear' },
+  { key: '40–50', lo: 40, hi: 50, mood: 'neutral' },
+  { key: '50–60', lo: 50, hi: 60, mood: 'neutral' },
+  { key: '60–70', lo: 60, hi: 70, mood: 'greed' },
+  { key: '≥ 70', lo: 70, hi: 101, mood: 'greed' },
+];
+
+// Cell shade: green when the bucket beat a random day at that horizon, red when
+// it lagged; opacity scales with the size of the gap.
+function edgeColor(edge, maxAbs) {
+  if (edge == null || maxAbs <= 0) return 'transparent';
+  // sqrt compression so a single extreme bucket (e.g. deep-panic <20) doesn't
+  // wash every other cell to near-transparent.
+  const t = Math.sqrt(Math.min(1, Math.abs(edge) / maxAbs));
+  const a = (0.08 + 0.6 * t).toFixed(3);
+  return edge >= 0 ? `rgba(35,209,139,${a})` : `rgba(246,79,104,${a})`;
+}
+const moodDot = (mood) => (mood === 'fear' ? C_FEAR : mood === 'greed' ? C_GREED : C_BASE);
+
 export default function EdgeStudy({ history }) {
   const [spx, setSpx] = useState(null);
   const [thr, setThr] = useState(THRESHOLDS[1]); // Strong (30/70) — balanced sample sizes
@@ -112,6 +135,26 @@ export default function EdgeStudy({ history }) {
       Greed: +r.greed.avg.toFixed(2),
     }));
   }, [A]);
+
+  // Full score-bucket × horizon matrix, each cell shaded by edge vs baseline.
+  const grid = useMemo(() => {
+    if (!samples || !samples.length) return null;
+    const baseline = {};
+    for (const h of HORIZONS) baseline[h] = mean(samples.map((s) => s.fwd[h]).filter((x) => x != null));
+    let maxAbs = 0;
+    const rows = GRID_BUCKETS.map((b) => {
+      const inB = samples.filter((s) => s.score >= b.lo && s.score < b.hi);
+      const cells = HORIZONS.map((h) => {
+        const v = inB.map((s) => s.fwd[h]).filter((x) => x != null);
+        const avg = v.length ? mean(v) : null;
+        const edge = avg == null ? null : avg - baseline[h];
+        if (edge != null && v.length >= 8) maxAbs = Math.max(maxAbs, Math.abs(edge));
+        return { n: v.length, avg, edge };
+      });
+      return { ...b, n: inB.length, cells };
+    });
+    return { rows, baseline, maxAbs };
+  }, [samples]);
 
   return (
     <div className="surface p-5 sm:p-6">
@@ -263,6 +306,58 @@ export default function EdgeStudy({ history }) {
               </tbody>
             </table>
           </div>
+
+          {/* The edge grid — full score spectrum × horizon heatmap */}
+          {grid && (
+            <div className="mt-6">
+              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="eyebrow">The edge grid</div>
+                <div className="font-mono text-[10px] text-dashboard-faint">avg forward return · shaded vs a random day</div>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[440px]">
+                  <div className="grid" style={{ gridTemplateColumns: '68px repeat(4, 1fr)' }}>
+                    <div className="pb-1 font-mono text-[9px] uppercase tracking-wide text-dashboard-faint">Score</div>
+                    {HORIZONS.map((h) => (
+                      <div key={h} className="pb-1 text-center font-mono text-[10px] text-dashboard-faint">{h === 1 ? '1d' : `${h}d`}</div>
+                    ))}
+                  </div>
+                  {grid.rows.map((r) => (
+                    <div key={r.key} className="grid items-stretch gap-1 py-0.5" style={{ gridTemplateColumns: '68px repeat(4, 1fr)' }}>
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] text-dashboard-muted">
+                        <span className="inline-block h-2 w-2 rounded-sm" style={{ background: moodDot(r.mood) }} />
+                        {r.key}
+                      </div>
+                      {r.cells.map((c, i) => (
+                        <div
+                          key={i}
+                          className="flex flex-col items-center justify-center rounded-md py-2"
+                          style={{ background: edgeColor(c.edge, grid.maxAbs), border: '1px solid rgba(34,48,74,0.55)' }}
+                          title={c.n ? `${c.n} days · ${fmtPct(c.avg, 2)} avg · ${fmtPct(c.edge, 2)} vs baseline` : 'no data'}
+                        >
+                          {c.avg == null ? (
+                            <span className="font-mono text-[11px] text-dashboard-faint">—</span>
+                          ) : (
+                            <>
+                              <span className={`font-mono text-[12px] font-semibold tabular-nums ${c.n < 8 ? 'opacity-50' : ''}`} style={{ color: '#e6ecf7' }}>
+                                {fmtPct(c.avg, 1)}
+                              </span>
+                              <span className="font-mono text-[8px] text-dashboard-faint">n={c.n}</span>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-[10px] text-dashboard-faint">
+                <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-4 rounded-sm" style={{ background: 'rgba(35,209,139,0.6)' }} /> beat a random day</span>
+                <span className="inline-flex items-center gap-1"><span className="inline-block h-2.5 w-4 rounded-sm" style={{ background: 'rgba(246,79,104,0.6)' }} /> lagged it</span>
+                <span>· shade = size of the gap · n = sample size</span>
+              </div>
+            </div>
+          )}
 
           {/* Neutral daily bias */}
           <div className="mt-4 rounded-lg border border-dashboard-hairline bg-dashboard-bg/40 px-4 py-3 text-[12px] leading-snug text-dashboard-muted">
