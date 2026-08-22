@@ -6,8 +6,8 @@ import { loadMarketSnapshot } from '../lib/supabase';
 
 // Fear -> greed ramp (matches the instrument palette). Extremes vivid, neutral recedes.
 const STOPS = [
-  [20, [35, 209, 139]], [35, [95, 214, 105]], [45, [150, 224, 79]],
-  [50, [247, 183, 55]], [58, [251, 150, 66]], [70, [249, 118, 72]], [82, [246, 79, 104]],
+  [20, [34, 231, 167]], [35, [90, 235, 130]], [45, [170, 240, 92]],
+  [50, [255, 201, 62]], [58, [255, 165, 60]], [70, [255, 120, 82]], [82, [255, 74, 110]],
 ];
 const lerp = (a, b, t) => Math.round(a + (b - a) * t);
 function rampRGB(s) {
@@ -25,7 +25,8 @@ function rampRGB(s) {
 function heatColor(s) {
   const c = rampRGB(s);
   const inten = Math.min(1, Math.abs(s - 50) / 26);
-  return `rgba(${c[0]},${c[1]},${c[2]},${(0.32 + 0.68 * inten).toFixed(3)})`;
+  // Brighter floor so neutral days still read as color, not mud.
+  return `rgba(${c[0]},${c[1]},${c[2]},${(0.62 + 0.38 * inten).toFixed(3)})`;
 }
 const solid = (s) => { const c = rampRGB(s); return `rgb(${c[0]},${c[1]},${c[2]})`; };
 

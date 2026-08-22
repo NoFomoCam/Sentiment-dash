@@ -15,7 +15,7 @@ function meaning(score) {
   return 'Extreme greed — high sell risk; contrarian caution warranted.';
 }
 
-const METER = 'linear-gradient(90deg,#23d18b 0%,#8fe04f 27%,#f7b737 50%,#fb8a3c 73%,#f64f68 100%)';
+const METER = 'linear-gradient(90deg,#22e7a7 0%,#aaf05c 27%,#ffc93e 50%,#ff9a3c 73%,#ff4a6e 100%)';
 
 export default function ScoreGauge({ label, sublabel, score, zone, percentile }) {
   const c = zone.color;
@@ -44,7 +44,7 @@ export default function ScoreGauge({ label, sublabel, score, zone, percentile })
       <div className="mt-4 flex items-end justify-center gap-2">
         <span
           className="font-black leading-none tabular-nums tracking-tight text-[84px] sm:text-[104px]"
-          style={{ color: c, textShadow: `0 0 44px ${c}40` }}
+          style={{ color: c, textShadow: `0 0 60px ${c}80, 0 0 24px ${c}55` }}
         >
           {score}
         </span>

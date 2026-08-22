@@ -9,13 +9,28 @@
 
   body {
     @apply bg-dashboard-bg text-dashboard-text font-sans antialiased;
-    /* Layered depth: a cool brand glow up top fading into deep navy. */
+    /* Layered depth: an electric-blue glow up top over deep navy. */
     background-image:
-      radial-gradient(120% 60% at 50% -10%, rgba(142, 163, 198, 0.10), transparent 60%),
-      radial-gradient(80% 50% at 85% 0%, rgba(35, 209, 139, 0.05), transparent 55%);
+      radial-gradient(120% 65% at 50% -12%, rgba(79, 157, 255, 0.18), transparent 60%),
+      radial-gradient(90% 55% at 88% -6%, rgba(56, 189, 248, 0.09), transparent 55%),
+      radial-gradient(70% 50% at 8% 4%, rgba(35, 209, 139, 0.05), transparent 55%);
     background-attachment: fixed;
     text-rendering: optimizeLegibility;
   }
+
+  /* Ambient electric glow that slowly breathes for a touch of life. */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: radial-gradient(50% 32% at 50% 0%, rgba(79, 157, 255, 0.12), transparent 72%);
+    animation: bgpulse 8s ease-in-out infinite;
+  }
+  @keyframes bgpulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+  button, a { transition: color .15s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease; }
 
   ::selection {
     background: rgba(142, 163, 198, 0.30);
@@ -48,8 +63,14 @@
 
   /* Eyebrow / section-label treatment (replaces scattered inline tracking). */
   .eyebrow {
-    @apply font-mono text-[10px] uppercase tracking-[0.22em] text-dashboard-faint;
+    @apply font-mono text-[10px] font-medium uppercase tracking-[0.2em] text-dashboard-faint;
   }
+
+  /* Electric glow for hero numbers. */
+  .glow-num { text-shadow: 0 0 24px currentColor; }
+
+  .surface { transition: border-color .25s ease, box-shadow .25s ease; }
+  .surface:hover { border-color: rgba(79, 157, 255, 0.28); }
 
   /* Small pill — freshness badge, tags. */
   .pill {
@@ -65,4 +86,5 @@
 .marquee-track { animation: marquee 34s linear infinite; }
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
+  body::before { animation: none; }
 }

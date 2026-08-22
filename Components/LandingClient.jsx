@@ -35,7 +35,7 @@ function useInView(threshold = 0.2) {
 }
 
 function heat(s) {
-  const stops = [[20, [35, 209, 139]], [40, [150, 224, 79]], [50, [247, 183, 55]], [65, [251, 138, 60]], [82, [246, 79, 104]]];
+  const stops = [[20, [34, 231, 167]], [40, [170, 240, 92]], [50, [255, 201, 62]], [65, [255, 150, 62]], [82, [255, 74, 110]]];
   let c = stops[stops.length - 1][1];
   if (s <= stops[0][0]) c = stops[0][1];
   else for (let i = 0; i < stops.length - 1; i++) {
@@ -43,7 +43,7 @@ function heat(s) {
     if (s >= a[0] && s <= b[0]) { const t = (s - a[0]) / (b[0] - a[0]); c = a[1].map((v, k) => Math.round(v + (b[1][k] - v) * t)); break; }
   }
   const inten = Math.min(1, Math.abs(s - 50) / 26);
-  return `rgba(${c[0]},${c[1]},${c[2]},${(0.34 + 0.66 * inten).toFixed(2)})`;
+  return `rgba(${c[0]},${c[1]},${c[2]},${(0.62 + 0.38 * inten).toFixed(2)})`;
 }
 
 const TAPE = [

@@ -14,12 +14,13 @@ module.exports = {
           elevated: '#16202f',
           border: '#22304a',
           hairline: '#1a2334',
-          // Ink
-          text: '#e9edf4',
-          muted: '#8497b3',
-          faint: '#586a86',
-          // Brand chrome = cool brushed steel (reserved from the data colors)
-          brand: '#8ea3c6',
+          // Ink — lifted for legibility + punch
+          text: '#eef2fa',
+          muted: '#a3b6d6',
+          faint: '#7e93ba',
+          // Brand chrome = electric blue (energy accent, still cool vs the amber data midpoint)
+          brand: '#4f9dff',
+          brandbright: '#6fb2ff',
           // Reserved fear → greed data scale (poppier)
           accent: '#f7b737',
           buy: '#23d18b',
@@ -41,9 +42,18 @@ module.exports = {
           '0%': { opacity: '0', transform: 'translateY(6px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
+        'pulse-glow': {
+          '0%, 100%': { opacity: '0.55' },
+          '50%': { opacity: '1' },
+        },
+        'sheen': {
+          '0%': { backgroundPosition: '-120% 0' },
+          '100%': { backgroundPosition: '220% 0' },
+        },
       },
       animation: {
         'fade-up': 'fade-up 0.5s cubic-bezier(0.16,1,0.3,1) both',
+        'pulse-glow': 'pulse-glow 3.2s ease-in-out infinite',
       },
     },
   },
