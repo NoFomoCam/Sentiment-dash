@@ -8,12 +8,18 @@ import { loadDivergenceData } from '../lib/supabase';
 
 // Dual-axis divergence view: two related series on independent scales so you can
 // see when they pull apart. Separate feature from the candlestick price charts.
+const LC = '#8ea3c6'; // steel — left series (solid)
+const RC = '#f7b737'; // amber — right series (dashed)
 const PAIRS = [
-  { id: 'spx-vix', label: 'SPX vs VIX', left: 'spx', right: 'vix', leftLabel: 'SPX', rightLabel: 'VIX', leftColor: '#f59e0b', rightColor: '#8b5cf6' },
-  { id: 'spx-gold', label: 'SPX vs Gold', left: 'spx', right: 'gld', leftLabel: 'SPX', rightLabel: 'GLD', leftColor: '#f59e0b', rightColor: '#fbbf24' },
-  { id: 'nvda-smh', label: 'NVDA vs SMH', left: 'nvda', right: 'smh', leftLabel: 'NVDA', rightLabel: 'SMH', leftColor: '#06b6d4', rightColor: '#10b981' },
-];
-const SYMBOLS = ['SPX', 'VIX', 'GLD', 'NVDA', 'SMH'];
+  { id: 'spx-ndx', left: 'spx', right: 'ndx', leftLabel: 'SPX', rightLabel: 'NDX' },
+  { id: 'spy-qqq', left: 'spy', right: 'qqq', leftLabel: 'SPY', rightLabel: 'QQQ' },
+  { id: 'spx-rsp', left: 'spx', right: 'rsp', leftLabel: 'SPX', rightLabel: 'RSP' },
+  { id: 'qqq-nvda', left: 'qqq', right: 'nvda', leftLabel: 'QQQ', rightLabel: 'NVDA' },
+  { id: 'spx-vix', left: 'spx', right: 'vix', leftLabel: 'SPX', rightLabel: 'VIX' },
+  { id: 'spx-gold', left: 'spx', right: 'gld', leftLabel: 'SPX', rightLabel: 'GLD' },
+  { id: 'nvda-smh', left: 'nvda', right: 'smh', leftLabel: 'NVDA', rightLabel: 'SMH' },
+].map((p) => ({ ...p, label: `${p.leftLabel} vs ${p.rightLabel}`, leftColor: LC, rightColor: RC }));
+const SYMBOLS = ['SPX', 'NDX', 'SPY', 'QQQ', 'RSP', 'VIX', 'GLD', 'NVDA', 'SMH'];
 const RANGES = { '1M': 30, '3M': 90, '6M': 180, '1Y': 365, '5Y': 1825 };
 
 const startFor = (days) => {
@@ -24,7 +30,7 @@ const startFor = (days) => {
 
 export default function DivergenceChart() {
   const [range, setRange] = useState('6M');
-  const [pairId, setPairId] = useState('spx-vix');
+  const [pairId, setPairId] = useState('spx-ndx');
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mounted, setMounted] = useState(false);
@@ -47,8 +53,8 @@ export default function DivergenceChart() {
     <div className="chart-container p-4">
       <div className="flex justify-between items-center mb-3">
         <div>
-          <div className="text-[9px] tracking-[3px] text-dashboard-muted">DIVERGENCE</div>
-          <div className="text-sm font-extrabold tracking-wider">{cfg.leftLabel} vs {cfg.rightLabel}</div>
+          <div className="eyebrow">Divergence</div>
+          <div className="text-sm font-bold tracking-tight">{cfg.leftLabel} vs {cfg.rightLabel}</div>
         </div>
         <div className="flex items-center gap-3 text-[8px] text-dashboard-muted font-mono">
           <span className="flex items-center gap-1"><span className="inline-block w-3 h-0.5" style={{ background: cfg.leftColor }} />{cfg.leftLabel}</span>
@@ -60,7 +66,7 @@ export default function DivergenceChart() {
       <div className="flex gap-1 justify-center mb-2.5">
         {Object.keys(RANGES).map((r) => (
           <button key={r} onClick={() => setRange(r)}
-            className={`font-mono text-[9px] px-2 py-0.5 rounded-sm tracking-wider border ${range === r ? 'text-dashboard-accent border-dashboard-accent bg-dashboard-accent/10' : 'text-dashboard-muted border-dashboard-border'}`}>
+            className={`font-mono text-[9px] px-2 py-0.5 rounded-sm tracking-wider border ${range === r ? 'text-dashboard-brand border-dashboard-brand bg-dashboard-brand/10' : 'text-dashboard-muted border-dashboard-border'}`}>
             {r}
           </button>
         ))}
@@ -69,12 +75,12 @@ export default function DivergenceChart() {
       {mounted && !loading && data.length >= 2 ? (
         <ResponsiveContainer width="100%" height={240}>
           <LineChart data={data} margin={{ top: 5, right: 8, left: -8, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" opacity={0.6} />
-            <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fill: '#475569', fontFamily: 'monospace', fontSize: 8 }} stroke="#1e293b" tickLine={false}
+            <CartesianGrid strokeDasharray="3 3" stroke="#18202f" opacity={0.7} />
+            <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fill: '#586a86', fontFamily: 'monospace', fontSize: 8 }} stroke="#22304a" tickLine={false}
               interval={Math.max(0, Math.ceil(data.length / 8) - 1)} minTickGap={20} />
-            <YAxis yAxisId="left" domain={['auto', 'auto']} tick={{ fill: cfg.leftColor, fontFamily: 'monospace', fontSize: 8 }} stroke="#1e293b" tickLine={false} width={42} />
-            <YAxis yAxisId="right" orientation="right" domain={['auto', 'auto']} tick={{ fill: cfg.rightColor, fontFamily: 'monospace', fontSize: 8 }} stroke="#1e293b" tickLine={false} width={38} />
-            <Tooltip contentStyle={{ background: '#0f172a', border: '1px solid #1e293b', fontFamily: 'monospace', fontSize: 10 }} labelStyle={{ color: '#64748b' }} />
+            <YAxis yAxisId="left" domain={['auto', 'auto']} tick={{ fill: cfg.leftColor, fontFamily: 'monospace', fontSize: 8 }} stroke="#22304a" tickLine={false} width={44} />
+            <YAxis yAxisId="right" orientation="right" domain={['auto', 'auto']} tick={{ fill: cfg.rightColor, fontFamily: 'monospace', fontSize: 8 }} stroke="#22304a" tickLine={false} width={44} />
+            <Tooltip contentStyle={{ background: '#10151f', border: '1px solid #22304a', borderRadius: 6, fontFamily: 'monospace', fontSize: 10 }} labelStyle={{ color: '#8497b3' }} />
             <Line yAxisId="left" type="monotone" dataKey={cfg.left} stroke={cfg.leftColor} strokeWidth={2} dot={false} name={cfg.leftLabel} isAnimationActive={false} />
             <Line yAxisId="right" type="monotone" dataKey={cfg.right} stroke={cfg.rightColor} strokeWidth={2} strokeDasharray="5 3" dot={false} name={cfg.rightLabel} isAnimationActive={false} />
           </LineChart>
@@ -86,10 +92,10 @@ export default function DivergenceChart() {
       )}
 
       {/* Pair selector */}
-      <div className="flex gap-1 justify-center mt-2">
+      <div className="flex flex-wrap gap-1 justify-center mt-2">
         {PAIRS.map((p) => (
           <button key={p.id} onClick={() => setPairId(p.id)}
-            className={`font-mono text-[9px] px-2.5 py-0.5 rounded-sm tracking-wider border ${pairId === p.id ? 'text-dashboard-text border-dashboard-border bg-dashboard-card' : 'text-dashboard-muted border-dashboard-border'}`}>
+            className={`font-mono text-[9px] px-2.5 py-0.5 rounded-sm tracking-wider border ${pairId === p.id ? 'text-dashboard-brand border-dashboard-brand/60 bg-dashboard-brand/10' : 'text-dashboard-muted border-dashboard-border'}`}>
             {p.label}
           </button>
         ))}

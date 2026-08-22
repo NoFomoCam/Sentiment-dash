@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { loadMarketData } from '../lib/supabase';
+import { loadMarketData, SYMBOL_LABELS, CLOSE_ONLY } from '../lib/supabase';
 
 const WINDOWS = [
   { label: '1M', days: 30 },
@@ -42,7 +42,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const chartRef = useRef(null);
-  const seriesRef = useRef(null);
+  const seriesRef = useRef(null);        // active series (candles or line)
+  const candleSeriesRef = useRef(null);
+  const lineSeriesRef = useRef(null);
   const dataRef = useRef([]);
   const priceLinesRef = useRef([]);   // [{ price, line }]
   const trendsRef = useRef([]);       // [[{logical, price}, {logical, price}], ...]
@@ -238,9 +240,10 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
       timeScale: { borderColor: '#22304a', timeVisible: false, rightOffset: 4 },
     });
 
-    const series = chart.addCandlestickSeries({
+    const candleSeries = chart.addCandlestickSeries({
       upColor: '#23d18b', downColor: '#f64f68', wickUpColor: '#23d18b', wickDownColor: '#f64f68', borderVisible: false,
     });
+    const lineSeries = chart.addLineSeries({ color: '#8ea3c6', lineWidth: 2, lastValueVisible: true, priceLineVisible: false });
 
     // Native click adds a horizontal level (only in horizontal mode; canvas is
     // pointer-events:none then so the chart receives the click).
@@ -252,7 +255,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
 
     chartRef.current = chart;
-    seriesRef.current = series;
+    candleSeriesRef.current = candleSeries;
+    lineSeriesRef.current = lineSeries;
+    seriesRef.current = candleSeries;
 
     const ro = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
@@ -267,6 +272,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(redraw); } catch {}
       chart.remove();
       chartRef.current = null; seriesRef.current = null;
+      candleSeriesRef.current = null; lineSeriesRef.current = null;
       priceLinesRef.current = []; trendsRef.current = [];
     };
   }, [chartLib, addLevelAt, redrawOverlay]);
@@ -277,15 +283,25 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
     let cancelled = false;
     setLoading(true);
     loadMarketData(symbol).then((rows) => {
-      if (cancelled || !seriesRef.current) return;
-      const candles = rows.map((r) => ({ time: r.date, open: +r.open, high: +r.high, low: +r.low, close: +r.close }));
-      dataRef.current = candles;
-      seriesRef.current.setData(candles);
+      if (cancelled || !candleSeriesRef.current) return;
+      if (CLOSE_ONLY.has(symbol)) {
+        const pts = rows.map((r) => ({ time: r.date, value: +r.close }));
+        lineSeriesRef.current.setData(pts);
+        candleSeriesRef.current.setData([]);
+        dataRef.current = pts;
+        seriesRef.current = lineSeriesRef.current;
+      } else {
+        const candles = rows.map((r) => ({ time: r.date, open: +r.open, high: +r.high, low: +r.low, close: +r.close }));
+        candleSeriesRef.current.setData(candles);
+        lineSeriesRef.current.setData([]);
+        dataRef.current = candles;
+        seriesRef.current = candleSeriesRef.current;
+      }
       applyWindow(win);
       redrawLevels(symbol);
       redrawTrends(symbol);
-      const last = candles[candles.length - 1], prev = candles[candles.length - 2];
-      setMeta(last ? { close: last.close, chg: prev ? ((last.close - prev.close) / prev.close) * 100 : 0, date: last.time } : null);
+      const last = rows[rows.length - 1], prev = rows[rows.length - 2];
+      setMeta(last ? { close: +last.close, chg: prev ? ((+last.close - +prev.close) / +prev.close) * 100 : 0, date: last.date } : null);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -319,7 +335,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'VIX', win: c
             onChange={(e) => setSymbol(e.target.value)}
             className="cursor-pointer rounded border border-dashboard-border bg-dashboard-card px-2 py-1 font-mono text-xs tracking-wider text-dashboard-text focus:border-dashboard-brand focus:outline-none"
           >
-            {(symbols.length ? symbols : [symbol]).map((s) => <option key={s} value={s}>{s}</option>)}
+            {(symbols.length ? symbols : [symbol]).map((s) => (
+              <option key={s} value={s}>{SYMBOL_LABELS[s] ? `${s} · ${SYMBOL_LABELS[s]}` : s}</option>
+            ))}
           </select>
           {meta && (
             <div className="font-mono text-xs">
