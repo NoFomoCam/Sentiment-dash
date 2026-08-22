@@ -60,6 +60,7 @@ export default function EdgeStudy({ history }) {
   const [spx, setSpx] = useState(null);
   const [thr, setThr] = useState(THRESHOLDS[1]); // Strong (30/70) — balanced sample sizes
   const [era, setEra] = useState('all'); // 'all' (2007+) | 'recent' (2021+, current CNN-era method)
+  const [regime, setRegime] = useState('all'); // 'all' | 'up' | 'down' (S&P vs its 200-day)
   const [err, setErr] = useState(false);
 
   useEffect(() => {
@@ -91,10 +92,17 @@ export default function EdgeStudy({ history }) {
         const j = i + h;
         if (j < spx.length) fwd[h] = (Number(spx[j].close) / base - 1) * 100;
       }
-      out.push({ date: row.date, score, fwd });
+      // 200-day trend regime on that date: price above/below its 200-day average.
+      let reg = null;
+      if (i >= 199) {
+        let sum = 0;
+        for (let k = i - 199; k <= i; k++) sum += Number(spx[k].close);
+        reg = base > sum / 200 ? 'up' : 'down';
+      }
+      out.push({ date: row.date, score, fwd, regime: reg });
     }
-    return out;
-  }, [spx, history, era]);
+    return regime === 'all' ? out : out.filter((s) => s.regime === regime);
+  }, [spx, history, era, regime]);
 
   const A = useMemo(() => {
     if (!samples || !samples.length) return null;
@@ -118,12 +126,13 @@ export default function EdgeStudy({ history }) {
     const h20 = byH[20];
     const fearEdge = h20.fear.avg - h20.all.avg;
     const greedEdge = h20.greed.avg - h20.all.avg;
-    const fearWorks = fearEdge > 0.25;   // fear meaningfully beats baseline
-    const greedInverts = greedEdge < -0.1; // greed actually underperforms
+    const fearWorks = fearEdge > 0.25 && h20.fear.n >= 8; // fear meaningfully beats baseline
+    const hasGreed = h20.greed.n >= 8;                    // enough greed days to say anything
+    const greedInverts = hasGreed && greedEdge < -0.1;    // greed actually underperforms
     return {
       perH, byH, fear, greed, neutral,
       nAll: samples.length, from: dates[0], to: dates[dates.length - 1],
-      fearEdge, greedEdge, fearWorks, greedInverts,
+      fearEdge, greedEdge, fearWorks, greedInverts, hasGreed,
     };
   }, [samples, thr]);
 
@@ -204,6 +213,23 @@ export default function EdgeStudy({ history }) {
               ))}
             </div>
           </div>
+          <div className="mt-2 inline-flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-dashboard-faint">Trend</span>
+            <div className="flex rounded-lg border border-dashboard-border bg-dashboard-bg/60 p-0.5">
+              {[['all', 'Both'], ['up', 'Uptrend'], ['down', 'Downtrend']].map(([k, l]) => (
+                <button
+                  key={k}
+                  onClick={() => setRegime(k)}
+                  className={`rounded-md px-2.5 py-1 font-mono text-[10px] transition ${
+                    regime === k ? 'bg-dashboard-border/70 text-dashboard-text' : 'text-dashboard-faint hover:text-dashboard-muted'
+                  }`}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-[9px] text-dashboard-faint">S&amp;P vs its 200-day</span>
+          </div>
         </div>
         {/* Threshold selector */}
         <div className="flex rounded-lg border border-dashboard-border bg-dashboard-bg/60 p-0.5">
@@ -256,8 +282,8 @@ export default function EdgeStudy({ history }) {
             <Callout
               tint={C_FEAR}
               tag={`After extreme fear (≤${thr.lo})`}
-              big={fmtPct(A.byH[20].fear.avg, 1)}
-              sub={`avg 20-day · ${A.byH[20].fear.up.toFixed(0)}% higher · ${A.byH[20].fear.n} days`}
+              big={A.byH[20].fear.n ? fmtPct(A.byH[20].fear.avg, 1) : '—'}
+              sub={A.byH[20].fear.n ? `avg 20-day · ${A.byH[20].fear.up.toFixed(0)}% higher · ${A.byH[20].fear.n} days` : 'no days at this level in this view'}
             />
             <Callout
               tint={C_BASE}
@@ -268,8 +294,8 @@ export default function EdgeStudy({ history }) {
             <Callout
               tint={C_GREED}
               tag={`After extreme greed (≥${thr.hi})`}
-              big={fmtPct(A.byH[20].greed.avg, 1)}
-              sub={`avg 20-day · ${A.byH[20].greed.up.toFixed(0)}% higher · ${A.byH[20].greed.n} days`}
+              big={A.byH[20].greed.n ? fmtPct(A.byH[20].greed.avg, 1) : '—'}
+              sub={A.byH[20].greed.n ? `avg 20-day · ${A.byH[20].greed.up.toFixed(0)}% higher · ${A.byH[20].greed.n} days` : 'no days at this level in this view'}
             />
           </div>
 
@@ -292,8 +318,12 @@ export default function EdgeStudy({ history }) {
               <>
                 <strong className="text-dashboard-buy">Buying fear is the edge.</strong> After extreme fear (≤{thr.lo}), the S&amp;P averaged{' '}
                 <strong>{fmtPct(A.byH[20].fear.avg, 1)}</strong> over the next 20 days — <strong>{fmtPct(A.fearEdge, 1)}</strong> better than a
-                random day, higher {A.byH[20].fear.up.toFixed(0)}% of the time. Extreme greed, though, kept grinding up
-                ({fmtPct(A.byH[20].greed.avg, 1)}) — so a hot reading is a cue to <em>tighten risk</em>, not to short. Fear snaps back; greed persists.
+                random day, higher {A.byH[20].fear.up.toFixed(0)}% of the time.
+                {A.hasGreed ? (
+                  <> Extreme greed, though, kept grinding up ({fmtPct(A.byH[20].greed.avg, 1)}) — so a hot reading is a cue to <em>tighten risk</em>, not to short. Fear snaps back; greed persists.</>
+                ) : (
+                  <> Extreme greed barely shows up in this view, so there’s little to fade on the other side.</>
+                )}
               </>
             ) : (
               <>
