@@ -6,6 +6,7 @@ import { scoreFromRawData, getZone } from '../lib/scoring';
 import ScoreGauge from '../Components/ScoreGauge';
 import IndicatorBreakdown from '../Components/IndicatorBreakdown';
 import SentimentChart from '../Components/SentimentChart';
+import SentimentCalendar from '../Components/SentimentCalendar';
 import PriceChart from '../Components/PriceChart';
 import DivergenceChart from '../Components/DivergenceChart';
 import WeeklyBiasChart from '../Components/WeeklyBiasChart';
@@ -362,6 +363,9 @@ export default function Dashboard() {
       <div className="mt-4">
         <SentimentChart history={history} win={win} />
       </div>
+
+      <Divider>Sentiment calendar</Divider>
+      <SentimentCalendar history={history} />
 
       <Divider>Divergence analysis</Divider>
       <DivergenceChart />
