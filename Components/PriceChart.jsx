@@ -73,6 +73,8 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const priceLinesRef = useRef([]);   // [{ price, line }]
   const drawingsRef = useRef([]);     // [{ type, points, text? }]
   const pendingRef = useRef(null);    // in-progress { type, points:[p1] }
+  const hotRef = useRef(null);        // { di, pi } endpoint under cursor (cursor mode)
+  const dragRef = useRef(null);       // { di, pi } endpoint being dragged
   const toolRef = useRef('cursor');
   const symbolRef = useRef(defaultSymbol);
 
@@ -88,6 +90,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const [drawCount, setDrawCount] = useState(0);
   const [sma50On, setSma50On] = useState(false);
   const [sma200On, setSma200On] = useState(false);
+  const [hot, setHot] = useState(false); // hovering a drawing endpoint (cursor mode)
 
   const refreshCount = useCallback(() => {
     setDrawCount(priceLinesRef.current.length + drawingsRef.current.length);
@@ -207,11 +210,27 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     return (logical == null || price == null) ? null : { logical, price };
   };
 
+  const hitEndpoint = useCallback((x, y) => {
+    const chart = chartRef.current, series = seriesRef.current;
+    if (!chart || !series) return null;
+    const ts = chart.timeScale();
+    for (let di = 0; di < drawingsRef.current.length; di++) {
+      const pts = drawingsRef.current[di].points;
+      for (let pi = 0; pi < pts.length; pi++) {
+        const cx = ts.logicalToCoordinate(pts[pi].logical), cy = series.priceToCoordinate(pts[pi].price);
+        if (cx != null && cy != null && Math.hypot(x - cx, y - cy) <= 7) return { di, pi };
+      }
+    }
+    return null;
+  }, []);
+
   const onOverlayDown = useCallback((e) => {
     const chart = chartRef.current, series = seriesRef.current;
     if (!chart || !series) return;
     const [x, y] = localXY(e);
     const t = toolRef.current;
+
+    if (t === 'cursor') { if (hotRef.current) dragRef.current = hotRef.current; return; }
 
     if (t === 'eraser') {
       const ts = chart.timeScale();
@@ -265,11 +284,19 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   }, [addLevelAt, redrawOverlay, saveDrawings, refreshCount]);
 
   const onOverlayMove = useCallback((e) => {
-    if (!pendingRef.current) return;
     const [x, y] = localXY(e);
-    const dp = toDataPoint(x, y);
-    if (dp) redrawOverlay({ p: dp });
-  }, [redrawOverlay]);
+    if (dragRef.current) {
+      const dp = toDataPoint(x, y);
+      if (dp) { const { di, pi } = dragRef.current; if (drawingsRef.current[di]) { drawingsRef.current[di].points[pi] = dp; redrawOverlay(); } }
+      return;
+    }
+    if (toolRef.current === 'cursor') { const h = hitEndpoint(x, y); hotRef.current = h; setHot(!!h); return; }
+    if (pendingRef.current) { const dp = toDataPoint(x, y); if (dp) redrawOverlay({ p: dp }); }
+  }, [redrawOverlay, hitEndpoint]);
+
+  const onOverlayUp = useCallback(() => {
+    if (dragRef.current) { dragRef.current = null; saveDrawings(); redrawOverlay(); }
+  }, [saveDrawings, redrawOverlay]);
 
   const applyWindow = useCallback((label) => {
     const chart = chartRef.current, data = dataRef.current;
@@ -326,6 +353,12 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     chart.subscribeClick((param) => { if (toolRef.current === 'horizontal' && param.point) addLevelAt(param.point.y); });
     const redraw = () => redrawOverlay();
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
+    const onCross = (param) => {
+      if (toolRef.current !== 'cursor' || dragRef.current || !param.point) return;
+      const h = hitEndpoint(param.point.x, param.point.y);
+      hotRef.current = h; setHot(!!h);
+    };
+    chart.subscribeCrosshairMove(onCross);
     chartRef.current = chart;
     seriesRef.current = series;
     sma50Ref.current = sma50; sma200Ref.current = sma200;
@@ -339,12 +372,13 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     return () => {
       ro.disconnect();
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(redraw); } catch {}
+      try { chart.unsubscribeCrosshairMove(onCross); } catch {}
       chart.remove();
       chartRef.current = null; seriesRef.current = null;
       sma50Ref.current = null; sma200Ref.current = null;
       priceLinesRef.current = []; drawingsRef.current = [];
     };
-  }, [chartLib, addLevelAt, redrawOverlay]);
+  }, [chartLib, addLevelAt, redrawOverlay, hitEndpoint]);
 
   // Fetch + render data on symbol change.
   useEffect(() => {
@@ -383,6 +417,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const chg = meta?.chg ?? 0;
   const chgColor = chg > 0 ? 'text-dashboard-buy' : chg < 0 ? 'text-dashboard-sell' : 'text-dashboard-muted';
   const drawing = tool !== 'cursor';
+  const active = drawing || hot;
 
   return (
     <div ref={wrapperRef} className={isFull ? 'fixed inset-0 z-50 flex flex-col bg-dashboard-bg p-4' : 'chart-container p-4'}>
@@ -442,9 +477,9 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
 
         <div className="relative min-w-0 flex-1" style={{ height: isFull ? '100%' : height }}>
           <div ref={containerRef} className="absolute inset-0" style={{ cursor: drawing ? 'crosshair' : 'default' }} />
-          <canvas ref={overlayRef} onMouseDown={onOverlayDown} onMouseMove={onOverlayMove}
+          <canvas ref={overlayRef} onMouseDown={onOverlayDown} onMouseMove={onOverlayMove} onMouseUp={onOverlayUp} onMouseLeave={onOverlayUp}
             className="absolute inset-0 z-10"
-            style={{ pointerEvents: drawing ? 'auto' : 'none', cursor: drawing ? 'crosshair' : 'default' }} />
+            style={{ pointerEvents: active ? 'auto' : 'none', cursor: hot ? 'grab' : (drawing ? 'crosshair' : 'default') }} />
         </div>
       </div>
 
