@@ -61,6 +61,9 @@ function computeSMA(candles, period) {
   return out;
 }
 
+const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+const crossScoreColor = (s) => (s <= 35 ? '#22e7a7' : s >= 65 ? '#ff4a6e' : '#ffc93e');
+
 export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: controlledWin = null, height = 400, history = [] }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
@@ -92,6 +95,13 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const [sma200On, setSma200On] = useState(false);
   const [hot, setHot] = useState(false); // hovering a drawing endpoint (cursor mode)
   const [signalsOn, setSignalsOn] = useState(true);
+  const [cross, setCross] = useState(null); // hovered bar readout { date, o,h,l,c, score }
+  const scoreByDateRef = useRef(new Map());
+  useEffect(() => {
+    const m = new Map();
+    for (const h of (history || [])) { const s = h.eod_score ?? h.live_score; if (h.date && s != null) m.set(h.date, Number(s)); }
+    scoreByDateRef.current = m;
+  }, [history]);
 
   // Past sentiment extremes as chart markers: fear (green ▲ below) / greed (red ▼ above).
   const markers = useMemo(() => {
@@ -374,6 +384,15 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     const redraw = () => redrawOverlay();
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
     const onCross = (param) => {
+      // Crosshair OHLC + sentiment readout (all tools).
+      if (!param.point || !param.time || !seriesRef.current) {
+        setCross(null);
+      } else {
+        const bar = param.seriesData?.get(seriesRef.current);
+        const date = typeof param.time === 'string' ? param.time : String(param.time);
+        if (bar) setCross({ date, o: bar.open, h: bar.high, l: bar.low, c: bar.close, score: scoreByDateRef.current.get(date) ?? null });
+        else setCross(null);
+      }
       if (toolRef.current !== 'cursor' || dragRef.current || !param.point) return;
       const h = hitEndpoint(param.point.x, param.point.y);
       hotRef.current = h; setHot(!!h);
@@ -509,6 +528,21 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
           <canvas ref={overlayRef} onMouseDown={onOverlayDown} onMouseMove={onOverlayMove} onMouseUp={onOverlayUp} onMouseLeave={onOverlayUp}
             className="absolute inset-0 z-10"
             style={{ pointerEvents: active ? 'auto' : 'none', cursor: hot ? 'grab' : (drawing ? 'crosshair' : 'default') }} />
+          {cross && (
+            <div className="pointer-events-none absolute left-2 top-2 z-20 rounded-md border border-dashboard-border bg-dashboard-card/90 px-2.5 py-1.5 font-mono text-[10px] leading-none backdrop-blur">
+              <span className="text-dashboard-faint">{cross.date}</span>
+              <span className="ml-2 text-dashboard-faint">O</span> <span className="text-dashboard-text">{fmtNum(cross.o)}</span>
+              <span className="ml-1.5 text-dashboard-faint">H</span> <span className="text-dashboard-text">{fmtNum(cross.h)}</span>
+              <span className="ml-1.5 text-dashboard-faint">L</span> <span className="text-dashboard-text">{fmtNum(cross.l)}</span>
+              <span className="ml-1.5 text-dashboard-faint">C</span> <span className="text-dashboard-text">{fmtNum(cross.c)}</span>
+              {cross.score != null && (
+                <>
+                  <span className="ml-2 text-dashboard-faint">sentiment</span>{' '}
+                  <span className="font-bold" style={{ color: crossScoreColor(cross.score) }}>{cross.score}</span>
+                </>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -312,6 +312,10 @@ export default function Dashboard() {
   const percentile = yearScores.length >= 20
     ? Math.round((100 * yearScores.filter((v) => v <= score).length) / yearScores.length)
     : null;
+  // Yesterday's score for the day-over-day move.
+  const prevScore = history.length >= 2
+    ? Number(history[history.length - 2].eod_score ?? history[history.length - 2].live_score)
+    : null;
 
   if (loading) {
     return (
@@ -365,7 +369,7 @@ export default function Dashboard() {
         </div>
 
         <div className="order-1 flex flex-col gap-4 lg:order-2">
-          <ScoreGauge label="Sentiment Score" sublabel="Full 11-indicator composite" score={score} zone={zone} percentile={percentile} />
+          <ScoreGauge label="Sentiment Score" sublabel="Full 11-indicator composite" score={score} zone={zone} percentile={percentile} prevScore={prevScore} />
 
           <section className="surface p-5">
             <div className="mb-3 flex items-center justify-between">

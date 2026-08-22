@@ -19,7 +19,7 @@ function meaning(score) {
 
 const METER = 'linear-gradient(90deg,#22e7a7 0%,#aaf05c 27%,#ffc93e 50%,#ff9a3c 73%,#ff4a6e 100%)';
 
-export default function ScoreGauge({ label, sublabel, score, zone, percentile }) {
+export default function ScoreGauge({ label, sublabel, score, zone, percentile, prevScore }) {
   const c = zone.color;
   const pos = Math.max(0, Math.min(100, score));
 
@@ -56,6 +56,18 @@ export default function ScoreGauge({ label, sublabel, score, zone, percentile })
         </span>
         <span className="mb-3 text-2xl font-semibold text-dashboard-faint">/100</span>
       </div>
+
+      {/* Day-over-day move */}
+      {prevScore != null && (() => {
+        const d = score - prevScore;
+        if (d === 0) return <div className="mt-1 text-center font-mono text-[11px] text-dashboard-faint">unchanged from yesterday</div>;
+        const up = d > 0;
+        return (
+          <div className="mt-1 text-center font-mono text-[11px] font-semibold" style={{ color: up ? '#ff8a5c' : '#22e7a7' }}>
+            {up ? '▲' : '▼'} {Math.abs(d)} {up ? 'toward greed' : 'toward fear'} vs yesterday
+          </div>
+        );
+      })()}
 
       {/* Fear <-> Greed meter with live marker */}
       <div className="mt-5">
