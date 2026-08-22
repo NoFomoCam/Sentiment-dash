@@ -10,6 +10,7 @@ import SentimentCalendar from '../Components/SentimentCalendar';
 import PriceChart from '../Components/PriceChart';
 import DivergenceChart from '../Components/DivergenceChart';
 import DivergenceSignal from '../Components/DivergenceSignal';
+import EdgeStudy from '../Components/EdgeStudy';
 import WeeklyBiasChart from '../Components/WeeklyBiasChart';
 import ReadingGuide from '../Components/ReadingGuide';
 
@@ -374,6 +375,9 @@ export default function Dashboard() {
       <div className="mt-4">
         <SentimentChart history={history} win={win} />
       </div>
+
+      <Divider>The edge</Divider>
+      <EdgeStudy history={history} />
 
       <Divider>Sentiment calendar</Divider>
       <SentimentCalendar history={history} />
