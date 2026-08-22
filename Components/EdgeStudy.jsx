@@ -5,6 +5,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from 'recharts';
 import { loadMarketData } from '../lib/supabase';
+import { getZone } from '../lib/scoring';
 import { DISCLAIMER_SHORT } from '../lib/legal';
 
 // Does buying fear / fading greed actually pay? We join every historical
@@ -136,6 +137,27 @@ export default function EdgeStudy({ history }) {
     }));
   }, [A]);
 
+  // What history says about *today's* score level (independent of the fear/greed
+  // threshold) — the actionable "for you, right now" read.
+  const today = useMemo(() => {
+    if (!history || !history.length || !samples) return null;
+    const last = history[history.length - 1];
+    const score = last.eod_score ?? last.live_score;
+    if (score == null) return null;
+    const band = 5;
+    const near = samples.filter((s) => Math.abs(s.score - score) <= band && s.date !== last.date);
+    const stat = (h) => {
+      const v = near.map((s) => s.fwd[h]).filter((x) => x != null);
+      return { n: v.length, avg: mean(v), up: upRate(v) };
+    };
+    const baseAvg = (h) => mean(samples.map((s) => s.fwd[h]).filter((x) => x != null));
+    const s20 = stat(20);
+    const base20 = baseAvg(20);
+    const edge20 = s20.avg - base20;
+    const lean = edge20 > 0.5 ? 'a bit stronger than' : edge20 < -0.5 ? 'a bit softer than' : 'right in line with';
+    return { score, date: last.date, band, s20, base20, edge20, lean, zone: getZone(score) };
+  }, [history, samples]);
+
   // Full score-bucket × horizon matrix, each cell shaded by edge vs baseline.
   const grid = useMemo(() => {
     if (!samples || !samples.length) return null;
@@ -209,6 +231,26 @@ export default function EdgeStudy({ history }) {
 
       {A && (
         <>
+          {/* Today's edge — what history says about the current level */}
+          {today && (
+            <div className="mt-5 rounded-xl border p-4" style={{ borderColor: `${today.zone.color}55`, background: `${today.zone.color}0f` }}>
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <div className="text-center">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-dashboard-faint">Right now</div>
+                  <div className="font-mono text-3xl font-bold leading-none tabular-nums" style={{ color: today.zone.color }}>{today.score}</div>
+                  <div className="mt-1 font-mono text-[10px] tracking-wide" style={{ color: today.zone.color }}>{today.zone.label}</div>
+                </div>
+                <p className="min-w-[220px] flex-1 text-[13px] leading-snug text-dashboard-muted">
+                  The last <strong className="text-dashboard-text">{today.s20.n}</strong> times the read sat near{' '}
+                  <strong className="text-dashboard-text">{today.score}</strong> (±{today.band}), the S&amp;P averaged{' '}
+                  <strong style={{ color: today.edge20 >= 0 ? C_FEAR : C_GREED }}>{fmtPct(today.s20.avg, 1)}</strong> over the next month —{' '}
+                  {today.lean} a normal month ({fmtPct(today.base20, 1)}), higher {today.s20.up.toFixed(0)}% of the time.
+                  {today.s20.n < 10 && <span className="text-dashboard-faint"> (Thin sample — read lightly.)</span>}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Headline callouts */}
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <Callout
