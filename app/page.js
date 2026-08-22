@@ -55,8 +55,10 @@ function snapshotToLiveData(snap) {
     if (!arr || arr.length === 0) continue;
     const last = arr[arr.length - 1];
     const prev = arr[arr.length - 2] || last;
+    const prev2 = arr[arr.length - 3] || prev;
     data[key] = last.close;
     data[`${key}_prev`] = prev.close;
+    data[`${key}_prev2`] = prev2.close;
   }
   return {
     data,
@@ -216,6 +218,7 @@ export default function Dashboard() {
   const [history, setHistory] = useState([]);
   const [score, setScore] = useState(0);         // single composite (full 11 indicators)
   const [scores, setScores] = useState({});
+  const [prevScores, setPrevScores] = useState(null); // yesterday's per-indicator scores (for deltas)
   const [loading, setLoading] = useState(true);
   const [brief, setBrief] = useState('');
   const [symbols, setSymbols] = useState([]);
@@ -302,6 +305,29 @@ export default function Dashboard() {
     const result = scoreFromRawData(today, prev, { drawdownPct: ddPct, includeEod: true });
     setScores(result.scores);
     setScore(result.eodScore);
+
+    // Yesterday's per-indicator scores → day-over-day deltas (needs 2 prior days).
+    if (data.spx_prev2 != null && Number.isFinite(Number(data.spx_prev2))) {
+      const pToday = {
+        vix: Number(data.vix_prev), vix9d: Number(data.vix9d_prev), vix3m: Number(data.vix3m_prev),
+        dxy: Number(data.dxy_prev), spy: Number(data.spy_prev), spx: Number(data.spx_prev),
+        rsp: Number(data.rsp_prev), nvda: Number(data.nvda_prev), smh: Number(data.smh_prev),
+        gld: Number(data.gld_prev), hyg: Number(data.hyg_prev), lqd: Number(data.lqd_prev),
+        nyad: Number(data.nyad_prev), fear_greed: num(data.fear_greed_prev), pcr: num(data.pcr_prev),
+      };
+      const pPrev = {
+        vix: Number(data.vix_prev2), spy: Number(data.spy_prev2), spx: Number(data.spx_prev2),
+        dxy: Number(data.dxy_prev2), rsp: Number(data.rsp_prev2),
+        nvda: Number(data.nvda_prev2), smh: Number(data.smh_prev2),
+        gld: Number(data.gld_prev2), hyg: Number(data.hyg_prev2), lqd: Number(data.lqd_prev2),
+      };
+      const pSeries = spxSeries.slice(0, -1);
+      const pHigh = pSeries.length ? Math.max(...pSeries, pToday.spx) : pToday.spx;
+      const pDd = pHigh > 0 ? ((pToday.spx / pHigh) - 1) * 100 : 0;
+      setPrevScores(scoreFromRawData(pToday, pPrev, { drawdownPct: pDd, includeEod: true }).scores);
+    } else {
+      setPrevScores(null);
+    }
     return result;
   }
 
@@ -397,6 +423,7 @@ export default function Dashboard() {
       <div className="mt-4">
         <IndicatorBreakdown
           scores={scores}
+          prevScores={prevScores}
           onExplain={(label, signal) => { setGuideTarget({ label, signal }); setShowGuide(true); }}
         />
       </div>

@@ -20,7 +20,7 @@ function getBarColor(score) {
 // onExplain(guideLabel, signalName) opens the Reading Guide at that indicator
 // with the current state highlighted. Rows without a glossary entry (drawdown)
 // still render, just not tappable.
-export default function IndicatorBreakdown({ scores, onExplain }) {
+export default function IndicatorBreakdown({ scores, onExplain, prevScores }) {
   const entries = Object.entries(scores)
     .filter(([key]) => WEIGHTS[key])
     .sort((a, b) => (WEIGHTS[b[0]] || 0) - (WEIGHTS[a[0]] || 0));
@@ -38,6 +38,8 @@ export default function IndicatorBreakdown({ scores, onExplain }) {
           const guideLabel = KEY_TO_GUIDE[key];
           const barColor = getBarColor(score);
           const tappable = guideLabel && sig;
+          const prev = prevScores && prevScores[key] != null ? prevScores[key] : null;
+          const delta = prev != null ? score - prev : null;
 
           const Row = (
             <div className="py-2.5">
@@ -59,12 +61,18 @@ export default function IndicatorBreakdown({ scores, onExplain }) {
                     style={{ width: `${score}%`, backgroundColor: barColor, boxShadow: `0 0 10px ${barColor}66` }}
                   />
                 </div>
-                <span
-                  className="w-7 shrink-0 text-right text-[13px] font-bold tabular-nums"
-                  style={{ color: barColor }}
-                >
-                  {score}
-                </span>
+                <div className="flex w-16 shrink-0 items-baseline justify-end gap-1">
+                  {delta != null && delta !== 0 && (
+                    <span
+                      className="font-mono text-[9px] font-semibold"
+                      style={{ color: delta > 0 ? '#ff8a5c' : '#22e7a7' }}
+                      title={`${delta > 0 ? '+' : ''}${delta} vs yesterday`}
+                    >
+                      {delta > 0 ? '▲' : '▼'}{Math.abs(delta)}
+                    </span>
+                  )}
+                  <span className="text-[13px] font-bold tabular-nums" style={{ color: barColor }}>{score}</span>
+                </div>
               </div>
             </div>
           );
