@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { getZone } from '../lib/scoring';
 
 // Fear -> greed ramp (matches the instrument palette). Extremes vivid, neutral recedes.
 const STOPS = [
@@ -27,11 +28,23 @@ function heatColor(s) {
 }
 const solid = (s) => { const c = rampRGB(s); return `rgb(${c[0]},${c[1]},${c[2]})`; };
 
+function meaning(score) {
+  if (score < 20) return 'Extreme fear — historically a strong contrarian BUY zone.';
+  if (score < 35) return 'Fear building — leaning buy; watch for price confirmation.';
+  if (score < 45) return 'Mild fear tilt — no strong contrarian edge yet.';
+  if (score < 55) return 'Neutral — no clear edge; wait for a signal.';
+  if (score < 65) return 'Complacency creeping in — stay selective on new longs.';
+  if (score < 75) return 'Greed — elevated correction risk; tighten up.';
+  return 'Extreme greed — high sell risk; contrarian caution warranted.';
+}
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const PITCH = 15; // cell (12px) + gap (3px)
+const fmtDate = (k) => { const [y, m, d] = k.split('-'); return `${MON[+m - 1]} ${+d}, ${y}`; };
 
 export default function SentimentCalendar({ history }) {
+  const [sel, setSel] = useState(null); // { key, score }
+
   const { map, weeks, monthMarks, months } = useMemo(() => {
     const map = {};
     for (const h of history || []) {
@@ -70,13 +83,14 @@ export default function SentimentCalendar({ history }) {
   }, [history]);
 
   if (!weeks.length) return null;
+  const selZone = sel ? getZone(sel.score) : null;
 
   return (
     <section className="surface p-4 sm:p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="eyebrow">Sentiment calendar · past year</div>
-          <div className="mt-1 text-[11px] text-dashboard-faint">Every trading day, tinted by its contrarian score — extremes glow, neutral recedes.</div>
+          <div className="mt-1 text-[11px] text-dashboard-faint">Every trading day, tinted by its contrarian score. Tap a day to read it.</div>
         </div>
         <div className="flex items-center gap-2 font-mono text-[10px] text-dashboard-faint">
           <span style={{ color: solid(20) }}>FEAR</span>
@@ -84,6 +98,21 @@ export default function SentimentCalendar({ history }) {
           <span style={{ color: solid(80) }}>GREED</span>
         </div>
       </div>
+
+      {/* Selected-day detail */}
+      {sel && (
+        <div className="mb-3 flex items-center gap-4 rounded-lg border border-dashboard-border bg-dashboard-bg/50 p-3">
+          <div className="text-center">
+            <div className="font-mono text-3xl font-bold leading-none tabular-nums" style={{ color: selZone.color }}>{sel.score}</div>
+            <div className="mt-1 font-mono text-[10px] text-dashboard-faint">{fmtDate(sel.key)}</div>
+          </div>
+          <div className="min-w-0">
+            <div className="font-mono text-[11px] tracking-wide" style={{ color: selZone.color }}>{selZone.label}</div>
+            <p className="mt-1 text-[12px] leading-snug text-dashboard-muted">{meaning(sel.score)}</p>
+          </div>
+          <button onClick={() => setSel(null)} className="ml-auto self-start font-mono text-[12px] text-dashboard-faint hover:text-dashboard-text">✕</button>
+        </div>
+      )}
 
       {/* Year heatmap */}
       <div className="overflow-x-auto pb-1">
@@ -96,9 +125,13 @@ export default function SentimentCalendar({ history }) {
           {weeks.flatMap((wk, ci) => wk.map((cell, ri) => (
             <div
               key={ci + '-' + ri}
+              onClick={() => cell.score != null && setSel(cell)}
               title={cell.score != null ? `${cell.key} · ${cell.score}` : cell.key}
-              className="h-[12px] w-[12px] rounded-[3px]"
-              style={{ background: cell.score != null ? heatColor(cell.score) : '#0e1420', border: '1px solid rgba(255,255,255,0.03)' }}
+              className={`h-[12px] w-[12px] rounded-[3px] ${cell.score != null ? 'cursor-pointer' : ''}`}
+              style={{
+                background: cell.score != null ? heatColor(cell.score) : '#0e1420',
+                border: sel && sel.key === cell.key ? '1px solid #e9edf4' : '1px solid rgba(255,255,255,0.03)',
+              }}
             />
           )))}
         </div>
@@ -106,13 +139,13 @@ export default function SentimentCalendar({ history }) {
 
       {/* Recent month detail */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {months.map((m, mi) => <MonthCard key={mi} year={m.year} month={m.month} map={map} />)}
+        {months.map((m, mi) => <MonthCard key={mi} year={m.year} month={m.month} map={map} sel={sel} onSelect={setSel} />)}
       </div>
     </section>
   );
 }
 
-function MonthCard({ year, month, map }) {
+function MonthCard({ year, month, map, sel, onSelect }) {
   const lead = new Date(year, month, 1).getDay();
   const days = new Date(year, month + 1, 0).getDate();
   const cells = [];
@@ -129,9 +162,12 @@ function MonthCard({ year, month, map }) {
         {cells.map((c, i) => c == null ? <div key={i} /> : (
           <div
             key={i}
+            onClick={() => c.score != null && onSelect(c)}
             title={c.score != null ? `${c.key} · ${c.score}` : c.key}
-            className="flex aspect-square items-center justify-center rounded font-mono text-[11px] font-semibold"
-            style={c.score != null ? { background: heatColor(c.score), color: 'rgba(255,255,255,0.92)' } : { background: '#0e1420', color: '#586a86' }}
+            className={`flex aspect-square items-center justify-center rounded font-mono text-[11px] font-semibold ${c.score != null ? 'cursor-pointer' : ''}`}
+            style={c.score != null
+              ? { background: heatColor(c.score), color: 'rgba(255,255,255,0.92)', outline: sel && sel.key === c.key ? '1.5px solid #e9edf4' : 'none' }
+              : { background: '#0e1420', color: '#586a86' }}
           >
             {c.score != null ? c.score : ''}
           </div>
