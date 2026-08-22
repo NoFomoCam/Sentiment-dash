@@ -162,7 +162,7 @@ function FreshnessPill({ usingFallback, behind, dataDate, refreshing }) {
   if (behind <= 1) {
     return (
       <span className="pill text-dashboard-buy" style={{ borderColor: '#23d18b44', background: '#23d18b12' }}>
-        <span className="h-1.5 w-1.5 rounded-full bg-dashboard-buy" style={{ boxShadow: '0 0 8px #23d18b' }} />
+        <span className="h-1.5 w-1.5 rounded-full bg-dashboard-buy animate-pulse-glow" style={{ boxShadow: '0 0 8px #23d18b' }} />
         Live · {dataDate}{refreshing && ' · ↻'}
       </span>
     );

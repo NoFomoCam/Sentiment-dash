@@ -32,7 +32,7 @@ export default function LazySection({ children, minHeight = 320 }) {
   return (
     <div ref={ref}>
       {shown ? (
-        children
+        <div className="animate-fade-up">{children}</div>
       ) : (
         <div
           style={{ minHeight }}

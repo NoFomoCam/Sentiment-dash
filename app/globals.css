@@ -87,4 +87,5 @@
 @media (prefers-reduced-motion: reduce) {
   .marquee-track { animation: none; }
   body::before { animation: none; }
+  .animate-pulse-glow { animation: none; }
 }

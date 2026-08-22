@@ -1,5 +1,7 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
 // Hero for the single composite score: a headline number + a diverging
 // fear<->greed meter (green -> amber -> red) with a live marker. One axis; the
 // score's position, the zone chip, and the number all carry the reading so it
@@ -20,6 +22,10 @@ const METER = 'linear-gradient(90deg,#22e7a7 0%,#aaf05c 27%,#ffc93e 50%,#ff9a3c 
 export default function ScoreGauge({ label, sublabel, score, zone, percentile }) {
   const c = zone.color;
   const pos = Math.max(0, Math.min(100, score));
+
+  // Sweep the marker in from the left on load / when the score changes.
+  const [p, setP] = useState(0);
+  useEffect(() => { const t = setTimeout(() => setP(pos), 80); return () => clearTimeout(t); }, [pos]);
 
   return (
     <section className="surface p-6 sm:p-7 animate-fade-up">
@@ -57,7 +63,7 @@ export default function ScoreGauge({ label, sublabel, score, zone, percentile })
           <div className="h-2.5 rounded-full" style={{ background: METER }} />
           <div
             className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
-            style={{ left: `${pos}%` }}
+            style={{ left: `${p}%`, transition: 'left 1.15s cubic-bezier(0.22,1,0.36,1)' }}
           >
             <div
               className="h-4 w-4 rounded-full border-2 border-dashboard-bg"
