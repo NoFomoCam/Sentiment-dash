@@ -1,7 +1,8 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { getZone } from '../lib/scoring';
+import { useEffect, useMemo, useState } from 'react';
+import { getZone, scoreFromRawData, WEIGHTS } from '../lib/scoring';
+import { loadMarketSnapshot } from '../lib/supabase';
 
 // Fear -> greed ramp (matches the instrument palette). Extremes vivid, neutral recedes.
 const STOPS = [
@@ -42,8 +43,43 @@ const DOW = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const PITCH = 15; // cell (12px) + gap (3px)
 const fmtDate = (k) => { const [y, m, d] = k.split('-'); return `${MON[+m - 1]} ${+d}, ${y}`; };
 
+// Recompute a past day's 11-indicator breakdown from grouped market_data closes
+// (same mapping + scoring the dashboard uses live).
+const SYMBOL_MAP = { VIX: 'vix', VSTN: 'vix9d', VIX3M: 'vix3m', DXY: 'dxy', SPY: 'spy', SPX: 'spx', RSP: 'rsp', NVDA: 'nvda', SMH: 'smh', GLD: 'gld', HYG: 'hyg', LQD: 'lqd', ADD: 'nyad', FG: 'fear_greed', PCR: 'pcr' };
+const IND_LABEL = { vix: 'VIX', vix_term: 'VIX Term', cnn_fg: 'Fear & Greed', dxy: 'DXY', rsp_spy: 'RSP / SPY', nyse_ad: 'NYSE A/D', nvda_smh: 'NVDA / SMH', spx_gold: 'SPX / Gold', hyg_lqd: 'HYG / LQD', drawdown: 'Drawdown', pcr: 'Put/Call' };
+const barColor = (s) => (s < 25 ? '#23d18b' : s < 45 ? '#8fe04f' : s < 55 ? '#f7b737' : s < 70 ? '#fb8a3c' : '#f64f68');
+function breakdownFor(snap, date) {
+  if (!snap || !snap.SPX) return null;
+  const today = { fear_greed: null, pcr: null }, prev = {};
+  for (const [sym, key] of Object.entries(SYMBOL_MAP)) {
+    const arr = snap[sym]; if (!arr) continue;
+    const i = arr.idx[date]; if (i == null) continue;
+    today[key] = arr[i].close;
+    if (i > 0) prev[key] = arr[i - 1].close;
+  }
+  const spx = snap.SPX, si = spx.idx[date];
+  if (si == null) return null;
+  const win = spx.slice(Math.max(0, si - 49), si + 1).map((x) => x.close);
+  const high = win.length ? Math.max(...win) : today.spx;
+  const dd = high > 0 ? ((today.spx / high) - 1) * 100 : 0;
+  return scoreFromRawData(today, prev, { drawdownPct: dd, includeEod: true }).scores;
+}
+
 export default function SentimentCalendar({ history }) {
   const [sel, setSel] = useState(null); // { key, score }
+  const [snap, setSnap] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadMarketSnapshot(430).then((g) => {
+      if (cancelled || !g) return;
+      for (const s of Object.keys(g)) g[s].idx = Object.fromEntries(g[s].map((x, i) => [x.date, i]));
+      setSnap(g);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const breakdown = useMemo(() => (sel && snap ? breakdownFor(snap, sel.key) : null), [sel, snap]);
 
   const { map, weeks, monthMarks, months } = useMemo(() => {
     const map = {};
@@ -101,16 +137,31 @@ export default function SentimentCalendar({ history }) {
 
       {/* Selected-day detail */}
       {sel && (
-        <div className="mb-3 flex items-center gap-4 rounded-lg border border-dashboard-border bg-dashboard-bg/50 p-3">
-          <div className="text-center">
-            <div className="font-mono text-3xl font-bold leading-none tabular-nums" style={{ color: selZone.color }}>{sel.score}</div>
-            <div className="mt-1 font-mono text-[10px] text-dashboard-faint">{fmtDate(sel.key)}</div>
+        <div className="mb-3 rounded-lg border border-dashboard-border bg-dashboard-bg/50 p-3">
+          <div className="flex items-center gap-4">
+            <div className="text-center">
+              <div className="font-mono text-3xl font-bold leading-none tabular-nums" style={{ color: selZone.color }}>{sel.score}</div>
+              <div className="mt-1 font-mono text-[10px] text-dashboard-faint">{fmtDate(sel.key)}</div>
+            </div>
+            <div className="min-w-0">
+              <div className="font-mono text-[11px] tracking-wide" style={{ color: selZone.color }}>{selZone.label}</div>
+              <p className="mt-1 text-[12px] leading-snug text-dashboard-muted">{meaning(sel.score)}</p>
+            </div>
+            <button onClick={() => setSel(null)} className="ml-auto self-start font-mono text-[12px] text-dashboard-faint hover:text-dashboard-text">✕</button>
           </div>
-          <div className="min-w-0">
-            <div className="font-mono text-[11px] tracking-wide" style={{ color: selZone.color }}>{selZone.label}</div>
-            <p className="mt-1 text-[12px] leading-snug text-dashboard-muted">{meaning(sel.score)}</p>
-          </div>
-          <button onClick={() => setSel(null)} className="ml-auto self-start font-mono text-[12px] text-dashboard-faint hover:text-dashboard-text">✕</button>
+          {breakdown && (
+            <div className="mt-3 border-t border-dashboard-hairline pt-3">
+              <div className="eyebrow mb-2">That day’s breakdown</div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+                {Object.entries(breakdown).filter(([k]) => WEIGHTS[k]).sort((a, b) => (WEIGHTS[b[0]] || 0) - (WEIGHTS[a[0]] || 0)).map(([k, v]) => (
+                  <div key={k} className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[11px] text-dashboard-muted">{IND_LABEL[k] || k}</span>
+                    <span className="font-mono text-[12px] font-bold tabular-nums" style={{ color: barColor(v) }}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
