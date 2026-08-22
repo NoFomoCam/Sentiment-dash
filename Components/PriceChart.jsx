@@ -49,12 +49,26 @@ function distToSeg(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
 
+// Simple moving average of candle closes → [{ time, value }].
+function computeSMA(candles, period) {
+  const out = [];
+  let sum = 0;
+  for (let i = 0; i < candles.length; i++) {
+    sum += candles[i].close;
+    if (i >= period) sum -= candles[i - period].close;
+    if (i >= period - 1) out.push({ time: candles[i].time, value: sum / period });
+  }
+  return out;
+}
+
 export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: controlledWin = null, height = 400 }) {
   const wrapperRef = useRef(null);
   const containerRef = useRef(null);
   const overlayRef = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
+  const sma50Ref = useRef(null);
+  const sma200Ref = useRef(null);
   const dataRef = useRef([]);
   const priceLinesRef = useRef([]);   // [{ price, line }]
   const drawingsRef = useRef([]);     // [{ type, points, text? }]
@@ -72,6 +86,8 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   const [meta, setMeta] = useState(null);
   const [tool, setTool] = useState('cursor');
   const [drawCount, setDrawCount] = useState(0);
+  const [sma50On, setSma50On] = useState(false);
+  const [sma200On, setSma200On] = useState(false);
 
   const refreshCount = useCallback(() => {
     setDrawCount(priceLinesRef.current.length + drawingsRef.current.length);
@@ -267,6 +283,12 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     catch { ts.fitContent(); }
   }, []);
 
+  const updateSMAs = useCallback(() => {
+    const d = dataRef.current || [];
+    if (sma50Ref.current) sma50Ref.current.setData(sma50On && d.length ? computeSMA(d, 50) : []);
+    if (sma200Ref.current) sma200Ref.current.setData(sma200On && d.length ? computeSMA(d, 200) : []);
+  }, [sma50On, sma200On]);
+
   const clearAll = useCallback(() => {
     const series = seriesRef.current;
     if (series) priceLinesRef.current.forEach((pl) => { try { series.removePriceLine(pl.line); } catch {} });
@@ -299,11 +321,14 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
     const series = chart.addCandlestickSeries({
       upColor: '#23d18b', downColor: '#f64f68', wickUpColor: '#23d18b', wickDownColor: '#f64f68', borderVisible: false,
     });
+    const sma50 = chart.addLineSeries({ color: '#5e9bff', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+    const sma200 = chart.addLineSeries({ color: '#f0a742', lineWidth: 1.5, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
     chart.subscribeClick((param) => { if (toolRef.current === 'horizontal' && param.point) addLevelAt(param.point.y); });
     const redraw = () => redrawOverlay();
     chart.timeScale().subscribeVisibleLogicalRangeChange(redraw);
     chartRef.current = chart;
     seriesRef.current = series;
+    sma50Ref.current = sma50; sma200Ref.current = sma200;
     const ro = new ResizeObserver(() => {
       if (containerRef.current && chartRef.current) {
         chartRef.current.applyOptions({ width: containerRef.current.clientWidth, height: containerRef.current.clientHeight || 400 });
@@ -316,6 +341,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
       try { chart.timeScale().unsubscribeVisibleLogicalRangeChange(redraw); } catch {}
       chart.remove();
       chartRef.current = null; seriesRef.current = null;
+      sma50Ref.current = null; sma200Ref.current = null;
       priceLinesRef.current = []; drawingsRef.current = [];
     };
   }, [chartLib, addLevelAt, redrawOverlay]);
@@ -341,6 +367,7 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
   }, [symbol, chartLib, applyWindow, redrawLevels, redrawDrawings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { applyWindow(win); redrawOverlay(); }, [win, applyWindow, redrawOverlay]);
+  useEffect(() => { updateSMAs(); }, [updateSMAs, meta]);
 
   useEffect(() => {
     const onFs = () => setIsFull(!!document.fullscreenElement);
@@ -382,6 +409,16 @@ export default function PriceChart({ symbols = [], defaultSymbol = 'SPX', win: c
               {w.label}
             </button>
           ))}
+          <button onClick={() => setSma50On((v) => !v)} title="50-day moving average"
+            className="rounded border border-dashboard-border px-2 py-1 font-mono text-[10px] tracking-wider text-dashboard-muted hover:text-dashboard-text"
+            style={sma50On ? { color: '#5e9bff', borderColor: '#5e9bff88', background: '#5e9bff18' } : undefined}>
+            MA50
+          </button>
+          <button onClick={() => setSma200On((v) => !v)} title="200-day moving average"
+            className="rounded border border-dashboard-border px-2 py-1 font-mono text-[10px] tracking-wider text-dashboard-muted hover:text-dashboard-text"
+            style={sma200On ? { color: '#f0a742', borderColor: '#f0a74288', background: '#f0a74218' } : undefined}>
+            MA200
+          </button>
           {drawCount > 0 && (
             <button onClick={clearAll} title="Clear all drawings for this symbol" className="rounded border border-dashboard-border px-2 py-1 font-mono text-[10px] text-dashboard-muted hover:text-dashboard-sell">
               ✕{drawCount}
